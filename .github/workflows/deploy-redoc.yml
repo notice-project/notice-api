@@ -6,6 +6,11 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   dump:
     name: Dump OpenAPI Spec
@@ -54,22 +59,38 @@ jobs:
         run: npm install -g @redocly/cli
 
       - name: Build Redocly API Documentation to Static HTML
-        run: redocly build-docs openapi.yaml --output _site/index.html
+        run: redocly build-docs openapi.yaml --output index.html
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v2
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v3
+        with:
+          name: docs
+          path: index.html
 
   deploy:
     name: Deploy Redocly API Documentation to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.url }}
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Documentation
+        uses: actions/download-artifact@v3
+        with:
+          name: docs
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          path: .
+
       - name: Deploy Redocly API Documentation to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v3
