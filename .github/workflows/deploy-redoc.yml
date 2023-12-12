@@ -1,0 +1,75 @@
+name: Deploy Redoc
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  dump:
+    name: Dump OpenAPI Spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup PDM
+        uses: pdm-project/setup-pdm@v3
+        with:
+          python-version: "3.10"
+          cache: true
+
+      - name: Install Dependencies
+        run: pdm sync
+
+      - name: Dump OpenAPI Spec
+        run: pdm run dump-spec --output openapi.yaml
+
+      - name: Upload OpenAPI Spec
+        uses: actions/upload-artifact@v3
+        with:
+          name: openapi
+          path: openapi.yaml
+
+  build:
+    name: Build Redocly API Documentation to Static HTML
+    needs: dump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download OpenAPI Spec
+        uses: actions/download-artifact@v3
+        with:
+          name: openapi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: Build Redocly API Documentation to Static HTML
+        run: redocly build-docs openapi.yaml --output _site/index.html
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v2
+
+  deploy:
+    name: Deploy Redocly API Documentation to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.url }}
+    steps:
+      - name: Deploy Redocly API Documentation to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
