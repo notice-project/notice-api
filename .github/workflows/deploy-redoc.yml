@@ -75,9 +75,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Download Documentation
         uses: actions/download-artifact@v3
         with:
@@ -87,7 +84,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-pages-artifact@v2
         with:
           path: .
 
