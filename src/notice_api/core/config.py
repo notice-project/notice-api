@@ -27,6 +27,9 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
 
+    LOG_JSON_FORMAT: bool = False
+    LOG_LEVEL: str = "INFO"
+
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
 # because the argument is loaded from the environment variables by pydantic-settings.
