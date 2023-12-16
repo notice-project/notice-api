@@ -1,5 +1,4 @@
 import importlib.metadata
-from contextlib import asynccontextmanager
 
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
