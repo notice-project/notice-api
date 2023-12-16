@@ -8,21 +8,10 @@ from notice_api import cors
 from notice_api.api.v1.v1_router import router as v1_router
 from notice_api.core.config import settings
 
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    """Context manager to run startup and shutdown events."""
-
-    # Run startup events
-    yield
-    # Run shutdown events
-
-
 app = FastAPI(
     title="Not!ce API",
-    description="API Server for the Not!ce project",
-    version=importlib.metadata.version("notice_api"),
-    lifespan=lifespan,
+    description=importlib.metadata.metadata(__package__)["Summary"],
+    version=importlib.metadata.version(__package__),
 )
 
 app.include_router(v1_router, prefix=settings.API_V1_STR)
