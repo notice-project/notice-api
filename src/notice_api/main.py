@@ -1,12 +1,19 @@
 import importlib.metadata
 from contextlib import asynccontextmanager
 
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from notice_api import cors
-from notice_api.api.v1.v1_router import router as v1_router
+import notice_api.utils.logging.core as logging_core
+import notice_api.utils.logging.middlewares as logging_middlewares
 from notice_api.core.config import settings
+
+logging_core.setup_logging(
+    json_logs=settings.LOG_JSON_FORMAT,
+    log_level=settings.LOG_LEVEL,
+)
 
 app = FastAPI(
     title="Not!ce API",
@@ -14,10 +21,15 @@ app = FastAPI(
     version=importlib.metadata.version(__package__),
 )
 
-app.include_router(v1_router, prefix=settings.API_V1_STR)
-
-if settings.BACKEND_CORS_ORIGINS:
-    cors.setup(app, settings.BACKEND_CORS_ORIGINS)
+logging_middlewares.install_logging_middleware(app)
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class HealthCheckResponse(BaseModel):
