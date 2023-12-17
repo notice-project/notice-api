@@ -4,9 +4,11 @@ from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 import notice_api.utils.logging.core as logging_core
 import notice_api.utils.logging.middlewares as logging_middlewares
+from notice_api.auth.routes import router as auth_router
 from notice_api.core.config import settings
 
 logging_core.setup_logging(
@@ -21,6 +23,7 @@ app = FastAPI(
 )
 
 logging_middlewares.install_logging_middleware(app)
+app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET_KEY)
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -42,3 +45,6 @@ def health_check() -> HealthCheckResponse:
     """Check if the server is running."""
 
     return HealthCheckResponse()
+
+
+app.include_router(auth_router)

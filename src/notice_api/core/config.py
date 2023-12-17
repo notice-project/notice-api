@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     LOG_JSON_FORMAT: bool = False
     LOG_LEVEL: str = "INFO"
 
+    NYCU_OAUTH_CLIENT_ID: str = ""
+    NYCU_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    SESSION_SECRET_KEY: str = "secret-key"
+
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
 # because the argument is loaded from the environment variables by pydantic-settings.
