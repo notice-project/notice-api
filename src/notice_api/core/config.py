@@ -5,9 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Settings for the Not!ce API."""
-
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     API_V1_STR: str = "/api/v1"
     """API version 1 prefix."""
@@ -24,6 +26,9 @@ class Settings(BaseSettings):
         if isinstance(v, (list, str)):
             return v
         raise ValueError(v)
+
+    LOG_JSON_FORMAT: bool = False
+    LOG_LEVEL: str = "INFO"
 
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
