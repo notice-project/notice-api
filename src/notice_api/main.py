@@ -14,7 +14,6 @@ import notice_api.utils.logging.middlewares as logging_middlewares
 from notice_api.auth.routes import router as auth_router
 from notice_api.core.config import settings
 
-
 logging_core.setup_logging(
     json_logs=settings.LOG_JSON_FORMAT,
     log_level=settings.LOG_LEVEL,
@@ -122,40 +121,42 @@ async def live_transcription(ws: WebSocket):
     # Initializes the Deepgram SDK
     deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
     try:
-        deepgramLive = await deepgram.transcription.live({
-            "smart_format": True,
-            "model": "nova-2",
-            "language": "en-US"
-        })
+        deepgramLive = await deepgram.transcription.live(
+            {"smart_format": True, "model": "nova-2", "language": "en-US"}
+        )
     except Exception as e:
-        logger.debug(f'Could not open socket: {e}')
+        logger.debug(f"Could not open socket: {e}")
         return
 
     saved_transcripts = []
     saved_timestamps = []
 
     def save_transcript(result):
-        transcript = result['channel']['alternatives'][0]['transcript']
-        timestamp = result['start']
+        transcript = result["channel"]["alternatives"][0]["transcript"]
+        timestamp = result["start"]
         if len(transcript) > 0:
             saved_transcripts.append(transcript)
             saved_timestamps.append(timestamp)
 
     # Listen for the connection to close
-    deepgramLive.registerHandler(deepgramLive.event.CLOSE, lambda _: print('Connection closed.'))
+    deepgramLive.registerHandler(
+        deepgramLive.event.CLOSE, lambda _: print("Connection closed.")
+    )
     # Listen for any transcripts received from Deepgram and write them to the console
-    deepgramLive.registerHandler(deepgramLive.event.TRANSCRIPT_RECEIVED, save_transcript)
+    deepgramLive.registerHandler(
+        deepgramLive.event.TRANSCRIPT_RECEIVED, save_transcript
+    )
 
     while True:
         _data = await ws.receive()
         logger.info("Received data")
 
-        if _data.get('text') == 'stop':
+        if _data.get("text") == "stop":
             logger.info("Ready to stop")
             break
 
         # Send audio data to Deepgram
-        deepgramLive.send(_data['bytes'])
+        deepgramLive.send(_data["bytes"])
 
     # Finished sending data to Deepgram
     await deepgramLive.finish()
