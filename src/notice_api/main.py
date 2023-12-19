@@ -1,9 +1,7 @@
 import importlib.metadata
 
-import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
-from deepgram import Deepgram
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -13,6 +11,7 @@ import notice_api.utils.logging.core as logging_core
 import notice_api.utils.logging.middlewares as logging_middlewares
 from notice_api.auth.routes import router as auth_router
 from notice_api.core.config import settings
+from notice_api.transcript.routes import router as transcribe_router
 
 logging_core.setup_logging(
     json_logs=settings.LOG_JSON_FORMAT,
@@ -106,60 +105,6 @@ def live_transcription_page():
     return HTMLResponse(html)
 
 
-@app.websocket("/transcription")
-async def live_transcription(ws: WebSocket):
-    """WebSocket endpoint for live audio transcription.
-
-    - saved_transcripts: a list of str, 逐字稿, 每個約4秒片段
-    - saved_timestamps: 對應的timestamp
-    - _data: websocket data from frontend
-    """
-    logger = structlog.get_logger("ws")
-    await ws.accept()
-    logger.info("Websocket connection established")
-
-    # Initializes the Deepgram SDK
-    deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
-    try:
-        deepgramLive = await deepgram.transcription.live(
-            {"smart_format": True, "model": "nova-2", "language": "en-US"}
-        )
-    except Exception as e:
-        logger.debug(f"Could not open socket: {e}")
-        return
-
-    saved_transcripts = []
-    saved_timestamps = []
-
-    def save_transcript(result):
-        transcript = result["channel"]["alternatives"][0]["transcript"]
-        timestamp = result["start"]
-        if len(transcript) > 0:
-            saved_transcripts.append(transcript)
-            saved_timestamps.append(timestamp)
-
-    # Listen for the connection to close
-    deepgramLive.registerHandler(
-        deepgramLive.event.CLOSE, lambda _: print("Connection closed.")
-    )
-    # Listen for any transcripts received from Deepgram and write them to the console
-    deepgramLive.registerHandler(
-        deepgramLive.event.TRANSCRIPT_RECEIVED, save_transcript
-    )
-
-    while True:
-        _data = await ws.receive()
-        logger.info("Received data")
-
-        if _data.get("text") == "stop":
-            logger.info("Ready to stop")
-            break
-
-        # Send audio data to Deepgram
-        deepgramLive.send(_data["bytes"])
-
-    # Finished sending data to Deepgram
-    await deepgramLive.finish()
-
-
 app.include_router(auth_router)
+
+app.include_router(transcribe_router)
