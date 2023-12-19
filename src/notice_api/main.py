@@ -2,6 +2,7 @@ import importlib.metadata
 
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
+from deepgram import Deepgram
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -13,7 +14,6 @@ import notice_api.utils.logging.middlewares as logging_middlewares
 from notice_api.auth.routes import router as auth_router
 from notice_api.core.config import settings
 
-from deepgram import Deepgram
 
 logging_core.setup_logging(
     json_logs=settings.LOG_JSON_FORMAT,
@@ -108,7 +108,7 @@ def live_transcription_page():
 
 
 @app.websocket("/transcription")
-async def live_transcription(ws: WebSocket) -> HealthCheckResponse:
+async def live_transcription(ws: WebSocket):
     """WebSocket endpoint for live audio transcription.
 
     - saved_transcripts: a list of str, 逐字稿, 每個約4秒片段
@@ -118,7 +118,7 @@ async def live_transcription(ws: WebSocket) -> HealthCheckResponse:
     logger = structlog.get_logger("ws")
     await ws.accept()
     logger.info("Websocket connection established")
-    
+
     # Initializes the Deepgram SDK
     deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
     try:
@@ -130,10 +130,10 @@ async def live_transcription(ws: WebSocket) -> HealthCheckResponse:
     except Exception as e:
         logger.debug(f'Could not open socket: {e}')
         return
-    
+
     saved_transcripts = []
     saved_timestamps = []
-    
+
     def save_transcript(result):
         transcript = result['channel']['alternatives'][0]['transcript']
         timestamp = result['start']
