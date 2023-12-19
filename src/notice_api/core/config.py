@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
     SESSION_SECRET_KEY: str = "secret-key"
-
+    DEEPGRAM_SECRET_KEY: str = ""
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
 # because the argument is loaded from the environment variables by pydantic-settings.
