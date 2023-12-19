@@ -1,6 +1,6 @@
+import structlog
 from deepgram import Deepgram
 from deepgram.transcription import LiveTranscriptionEvent
-import structlog
 from fastapi import APIRouter, WebSocket
 
 from notice_api.core.config import settings
