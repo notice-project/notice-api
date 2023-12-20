@@ -29,6 +29,7 @@ async def handle_live_transcription(ws: WebSocket):
     def save_transcript(result):
         transcript = result["channel"]["alternatives"][0]["transcript"]
         timestamp = result["start"]
+        logger.info(transcript)
         if len(transcript) > 0:
             saved_transcripts.append(transcript)
             saved_timestamps.append(timestamp)
