@@ -17,6 +17,7 @@ dependencies = [
     "itsdangerous>=2.1.2",
     "deepgram-sdk>=2.12.0",
     "pydub>=0.25.1",
+    "langchain>=0.0.352",
 ]
 requires-python = "==3.10.*"
 readme = "README.md"
