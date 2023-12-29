@@ -1,11 +1,15 @@
+# ruff: noqa: RUF001
+
 from langchain.chains import LLMChain, SimpleSequentialChain
-from langchain.llms import OpenAI
+from langchain.llms.openai import OpenAI
 from langchain.prompts import PromptTemplate
 
-llm = OpenAI(temperature=0.3, openai_api_key=_'key_here')
+from notice_api.core.config import settings
+
+llm = OpenAI(temperature=0.3, api_key=settings.OPENAI_API_KEY)
 
 
-def gen_model(input1, input2):
+def gen_model(input1: str, input2: str):
     # 去除冗言贅字
     template = """Eliminate redundant words from this transcript
     % TRANSCRIPT
@@ -15,7 +19,6 @@ def gen_model(input1, input2):
     chain1 = LLMChain(llm=llm, prompt=prompt_template)
 
     # 整理成條列式
-
     writingstemplate = """
         - task：Your job is to generate bulletpoint notes from the provided transcript
             - input：
