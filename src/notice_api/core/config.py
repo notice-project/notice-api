@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str = "secret-key"
     DEEPGRAM_SECRET_KEY: str = ""
 
+    OPENAI_API_KEY: str = ""
+
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
 # because the argument is loaded from the environment variables by pydantic-settings.
