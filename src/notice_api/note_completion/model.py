@@ -1,5 +1,7 @@
 # ruff: noqa: RUF001
 
+from typing import Sequence
+
 from langchain.chains import LLMChain, SimpleSequentialChain
 from langchain.llms.openai import OpenAI
 from langchain.prompts import PromptTemplate
@@ -9,7 +11,7 @@ from notice_api.core.config import settings
 llm = OpenAI(temperature=0.3, api_key=settings.OPENAI_API_KEY)
 
 
-def gen_model(input1: str, input2: str):
+def gen_model(transcript: str | Sequence[str], usernote: str):
     # 去除冗言贅字
     template = """Eliminate redundant words from this transcript
     % TRANSCRIPT
@@ -87,4 +89,4 @@ def gen_model(input1: str, input2: str):
 
     # 串起三個部分
     overall_chain = SimpleSequentialChain(chains=[chain1, chain2], verbose=True)
-    return overall_chain.run(input1)
+    return overall_chain.run(transcript)
