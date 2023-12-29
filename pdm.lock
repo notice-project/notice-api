@@ -5,7 +5,7 @@
 groups = ["default", "dev", "dump"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:7b3a9015fc0f6ccb7ee0d157d96221ac4ccec12940111a71aabba3cbe489dcb0"
+content_hash = "sha256:e3ed095d0ec4b3af7fac7a1d7630f0e50d56013b403516bd3a6f17081a3e1322"
 
 [[package]]
 name = "aiohttp"
@@ -262,6 +262,16 @@ dependencies = [
 files = [
     {file = "deepgram-sdk-2.12.0.tar.gz", hash = "sha256:04d69f821c6b27789578102e237d451b026d5d78e980cd1a7ea365ca7ef58b8f"},
     {file = "deepgram_sdk-2.12.0-py3-none-any.whl", hash = "sha256:e84fb6e0d05ba20f28767a7e9f1cb6e8b8eafd66c76ffe147c06036436f4d662"},
+]
+
+[[package]]
+name = "distro"
+version = "1.9.0"
+requires_python = ">=3.6"
+summary = "Distro - an OS platform information API"
+files = [
+    {file = "distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2"},
+    {file = "distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed"},
 ]
 
 [[package]]
@@ -608,6 +618,25 @@ files = [
 ]
 
 [[package]]
+name = "openai"
+version = "1.6.1"
+requires_python = ">=3.7.1"
+summary = "The official Python library for the openai API"
+dependencies = [
+    "anyio<5,>=3.5.0",
+    "distro<2,>=1.7.0",
+    "httpx<1,>=0.23.0",
+    "pydantic<3,>=1.9.0",
+    "sniffio",
+    "tqdm>4",
+    "typing-extensions<5,>=4.7",
+]
+files = [
+    {file = "openai-1.6.1-py3-none-any.whl", hash = "sha256:bc9f774838d67ac29fb24cdeb2d58faf57de8b311085dcd1348f7aa02a96c7ee"},
+    {file = "openai-1.6.1.tar.gz", hash = "sha256:d553ca9dbf9486b08e75b09e8671e4f638462aaadccfced632bf490fc3d75fa2"},
+]
+
+[[package]]
 name = "packaging"
 version = "23.2"
 requires_python = ">=3.7"
@@ -913,6 +942,19 @@ summary = "Retry code until it succeeds"
 files = [
     {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
     {file = "tenacity-8.2.3.tar.gz", hash = "sha256:5398ef0d78e63f40007c1fb4c0bff96e1911394d2fa8d194f77619c05ff6cc8a"},
+]
+
+[[package]]
+name = "tqdm"
+version = "4.66.1"
+requires_python = ">=3.7"
+summary = "Fast, Extensible Progress Meter"
+dependencies = [
+    "colorama; platform_system == \"Windows\"",
+]
+files = [
+    {file = "tqdm-4.66.1-py3-none-any.whl", hash = "sha256:d302b3c5b53d47bce91fea46679d9c3c6508cf6332229aa1e7d8653723793386"},
+    {file = "tqdm-4.66.1.tar.gz", hash = "sha256:d88e651f9db8d8551a62556d3cff9e3034274ca5d66e93197cf2490e2dcb69c7"},
 ]
 
 [[package]]
