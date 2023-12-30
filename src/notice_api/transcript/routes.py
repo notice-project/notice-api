@@ -1,4 +1,4 @@
-from typing import Annotated, AsyncGenerator, BinaryIO
+from typing import Annotated, AsyncGenerator
 
 import structlog
 from deepgram import Deepgram
@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import HTMLResponse
 
 from notice_api.core.config import settings
-from notice_api.transcript import audio_saver
+from notice_api.transcript.audio_saver import (
+    AudioSaver,
+    audio_file_name,
+    get_audio_saver,
+)
 from notice_api.transcript.transcript_saver import (
     TranscriptResultSaver,
     get_transcript_result_saver,
@@ -29,7 +33,7 @@ html = f"""
         <script>
             var recordBtn = document.querySelector('#record-btn');
             var isRecording = false;
-            var ws = new WebSocket('ws://localhost:8000/transcription/{audio_saver.audio_file_name}.mp3');
+            var ws = new WebSocket('ws://localhost:8000/transcription/{audio_file_name}.mp3');
             var mediaRecorder;
             navigator.mediaDevices
                 .getUserMedia({{ audio: true }})
@@ -111,7 +115,7 @@ async def get_live_transciber(
 @router.websocket("/transcription/{filename}")
 async def handle_live_transcription(
     ws: WebSocket,
-    temp_audio_writer: Annotated[BinaryIO, Depends(audio_saver.get_audio_saver)],
+    temp_audio_writer: Annotated[AudioSaver, Depends(get_audio_saver)],
     deepgram_live: Annotated[LiveTranscription, Depends(get_live_transciber)],
 ):
     logger = structlog.get_logger("ws")
