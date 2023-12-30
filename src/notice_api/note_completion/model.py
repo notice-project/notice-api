@@ -42,7 +42,8 @@ note_generation_template = """
         - the bulletpoints should strictly follow the chronological order of the input transcript
         - output the bulletpoints using markdown
         - each content of the bulletpoints can only be one of the following: a single sentence, keyword(s), words used for formatting
-        - if a bulletpoint sentence is too long, split it into multiple sub-bulletpoints
+        - a bulletpoint should be less than 60 characters. if it is longer that, split it into multiple sub-bulletpoints
+        - sub-bulletpoints have additional tabs in front
         - the whole output should contain at least 1500 characters and be as detailed as possible
         - only output the bulletpoints and sub-bulletpoints texts
         - don't use the example output word for word
@@ -56,36 +57,60 @@ note_generation_template = """
             ...
         "
         - example output: "
-- Introduction to Algorithms
-    - Lecture two
-    - Erik Demaine loves algorithms
-- Data Structures
-    - Sequences, sets, linked lists, dynamic arrays
-    - Simple data structures
-    - Beginning of several data structures
-- Interface vs Data Structure
-    - Interface specifies what you want to do
-    - Data structure specifies how to do it
-- Operations on Data Structures
-    - Storing data
-    - Specifying operations and their meanings
-    - Algorithms for supporting operations
-- Two main interfaces: set and sequence
-    - Set: maintaining data in sorted order, searching for a key
-    - Sequence: maintaining a particular sequence, storing n things
-- Two main approaches: arrays and pointers
-- Static Sequence Interface
-    - Number of items doesn't change
-    - Operations: build, length, iteration, get, set
-- Static Array
-    - Solution to the static sequence interface problem
-    - No static arrays in Python, only dynamic arrays
-- Word RAM model of computation
+            - Introduction to Algorithms
+                - Lecture two
+                - Erik Demaine loves algorithms
+            - Data Structures
+                - Sequences, sets, linked lists, dynamic arrays
+                - Simple data structures
+                - Beginning of several data structures
+            - Interface vs Data Structure
+                - Interface specifies what you want to do
+                - Data structure specifies how to do it
+            - Operations on Data Structures
+                - Storing data
+                - Specifying operations and their meanings
+                - Algorithms for supporting operations
+            - Two main interfaces: set and sequence
+                - Set: maintaining data in sorted order, searching for a key
+                - Sequence: maintaining a particular sequence, storing n things
+            - Two main approaches: arrays and pointers
+            - Static Sequence Interface
+                - Number of items doesn't change
+                - Operations: build, length, iteration, get, set
+            - Static Array
+                - Solution to the static sequence interface problem
+                - No static arrays in Python, only dynamic arrays
+            - Word RAM model of computation
         "
 
 - transcript ```{transcript}```
 """
 
+check_with_usernote_template = """
+- task: Classify if each line in the generated note is mentioned in the user note
+    - input:
+        - user note: ```(usernote)```
+        - generated note: ```(generated_note)```
+    - output:
+        - output the whole generated note, but at the start of each line, add an indicator that is either <Y> or <N>
+        - add <Y> if this line is mentioned in the user note
+        - add <N> if this line is NOT mentioned in the user note
+        - a line is mentioned in the user note if it is contextually related or can be implied by the user note
+        - If classified as <Y>, change it to <N> if this line has sub-points classified as <N>.
+        - example output: "
+<N> - Static sequence interface
+<Y>     - Number of items doesn't change
+<N>     - Static array is the natural solution to this interface problem
+<Y>         - Data structures can be considered solutions
+<N>         - Memory is an array of w-bit words
+<Y>     - Operations: build, length, iteration, get, set
+                    "
+
+- user note: ```{usernote}```
+
+- generated note: ```{generated_note}```
+"""
 
 def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> str:
     # 去除冗言贅字
@@ -116,13 +141,26 @@ def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> s
 
 
 def generate_note_openai(transcript: str | Sequence[str], usernote: str):
+    # 整理成條列式
     note_generation_prompt = note_generation_template.format(
         transcript="\n".join(transcript)
     )
     response = OpenAIClient.chat.completions.create(
         model="gpt-3.5-turbo-16k",
         messages=[{"role": "user", "content": note_generation_prompt}],
-        temperature=0.3,
+        temperature=0.5,
     )
-    generated_notes = response.choices[0].message.content
-    return generated_notes or ''
+    generated_note = response.choices[0].message.content
+
+    # 與使用者筆記做對照並標記
+    check_with_usernote_prompt = check_with_usernote_template.format(
+        usernote=usernote,
+        generated_note=generated_note
+    )
+    response = OpenAIClient.chat.completions.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[{"role": "user", "content": check_with_usernote_prompt}],
+        temperature=0.0,
+    )
+    check_result = response.choices[0].message.content
+    return check_result or ''
