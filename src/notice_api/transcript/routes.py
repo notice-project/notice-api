@@ -1,19 +1,23 @@
-from io import BytesIO
+from typing import Annotated, AsyncGenerator
 
 import structlog
 from deepgram import Deepgram
-from deepgram.transcription import LiveTranscriptionEvent
-from fastapi import APIRouter, WebSocket
+from deepgram.transcription import LiveTranscription, LiveTranscriptionEvent
+from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import HTMLResponse
-from pydub import AudioSegment
 
 from notice_api.core.config import settings
+from notice_api.transcript.audio_saver import (
+    AudioSaver,
+    audio_file_name,
+    get_audio_saver,
+)
+from notice_api.transcript.transcript_saver import (
+    TranscriptResultSaver,
+    get_transcript_result_saver,
+)
 
-router = APIRouter()
-
-AUDIO_DIRECTORY = "../audio_temp"  # Path for all audio file
-TEMP_MIME_AUDIO_PATH = "../audio_temp/test_audio.bin"  # Path for temporary mime file
-audio_file_name = "note_name"  # Name for saving current audio
+router = APIRouter(tags=["transcription"])
 
 MEDIA_RECORDER_INTERVAL = 1000
 html = f"""
@@ -71,67 +75,61 @@ def live_transcription_page():
     return HTMLResponse(html)
 
 
-@router.websocket("/transcription/{output_filename}")
-async def handle_live_transcription(ws: WebSocket, output_filename: str):
+async def get_live_transciber(
+    result_saver: Annotated[
+        TranscriptResultSaver, Depends(get_transcript_result_saver)
+    ],
+) -> AsyncGenerator[LiveTranscription, None]:
+    """Get a live transcription connection to Deepgram.
+
+    This function can be used as a FastAPI dependency to get a live transcription
+    connection to Deepgram. The connection will be closed when the request is
+    finished.
+
+    Args:
+        result_saver: The result saver to use to save transcripts.
+    """
+
+    logger = structlog.get_logger("live_transcription")
+
+    deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
+    deepgram_live = await deepgram.transcription.live(
+        {"smart_format": True, "model": "nova-2", "language": "en-US"}
+    )
+
+    deepgram_live.registerHandler(
+        LiveTranscriptionEvent.CLOSE,
+        lambda _: logger.info("Connection closed."),
+    )
+    deepgram_live.registerHandler(
+        LiveTranscriptionEvent.TRANSCRIPT_RECEIVED,
+        result_saver.save_transcript,
+    )
+
+    yield deepgram_live
+
+    logger.info("Closing connection")
+    await deepgram_live.finish()
+
+
+@router.websocket("/transcription/{filename}")
+async def handle_live_transcription(
+    ws: WebSocket,
+    temp_audio_writer: Annotated[AudioSaver, Depends(get_audio_saver)],
+    deepgram_live: Annotated[LiveTranscription, Depends(get_live_transciber)],
+):
     logger = structlog.get_logger("ws")
     await ws.accept()
     logger.info("Websocket connection established")
 
-    with open(TEMP_MIME_AUDIO_PATH, "wb") as audio_file:
-        deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
-        try:
-            deepgramLive = await deepgram.transcription.live(
-                {"smart_format": True, "model": "nova-2", "language": "en-US"}
-            )
-        except Exception as e:
-            logger.debug("Could not open socket", error=e)
-            return
+    while True:
+        message = await ws.receive()
+        logger.info("Received data")
 
-        saved_transcripts = []
-        saved_timestamps = []
-
-        def save_transcript(result: dict):
-            transcript = result["channel"]["alternatives"][0]["transcript"]
-            timestamp = result["start"]
-            logger.info(transcript)
-            if len(transcript) > 0:
-                saved_transcripts.append(transcript)
-                saved_timestamps.append(timestamp)
-
-        deepgramLive.registerHandler(
-            LiveTranscriptionEvent.CLOSE, lambda _: print("Connection closed.")
-        )
-        deepgramLive.registerHandler(
-            LiveTranscriptionEvent.TRANSCRIPT_RECEIVED, save_transcript
-        )
-
-        while True:
-            data = await ws.receive()
-            logger.info("Received data")
-
-            if data.get("text") == "stop":
+        match message:
+            case {"text": "stop"}:
                 logger.info("Stopping recording")
-                # Convert mimetype to mp3 for playback
-                mimetype_to_mp3(output_filename)
-                break
-
-            # Write temporary mime audio file to local
-            audio_file.write(data["bytes"])
-
-            deepgramLive.send(data["bytes"])
-
-        await deepgramLive.finish()
-
-
-def mimetype_to_mp3(output_filename: str):
-    logger = structlog.get_logger()
-    file_path = TEMP_MIME_AUDIO_PATH
-
-    with open(file_path, "rb") as file:
-        audio_bytes = file.read()
-
-    audio_segment = AudioSegment.from_file(BytesIO(audio_bytes))
-
-    output_path = f"{AUDIO_DIRECTORY}/{output_filename}"
-    audio_segment.export(output_path, format="mp3")
-    logger.info("Converted file into mp3")
+                return
+            case {"bytes": b}:
+                temp_audio_writer.write(b)
+                deepgram_live.send(b)

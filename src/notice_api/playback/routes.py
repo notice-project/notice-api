@@ -1,19 +1,20 @@
-import os
+from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path
 from fastapi.responses import FileResponse
 
-from notice_api.transcript.routes import AUDIO_DIRECTORY
+from notice_api.transcript import audio_saver
 
-router = APIRouter()
+router = APIRouter(tags=["audio"])
 
 
-@router.get("/audio")
-async def get_audio(filename: str = Query(..., description="Name of the audio file")):
+@router.get("/audio/{filename:path}")
+async def get_audio(
+    filename: Annotated[str, Path(description="The filename of the audio file")],
+) -> FileResponse:
     logger = structlog.get_logger()
-    directory_path = AUDIO_DIRECTORY
-    audio_file_path = os.path.join(directory_path, f"{filename}.mp3")
+    audio_file_path = audio_saver.get_path_for(filename)
 
     logger.info(f"Retrieved audio file: {filename}")
     return FileResponse(path=audio_file_path, media_type="audio/mpeg")
