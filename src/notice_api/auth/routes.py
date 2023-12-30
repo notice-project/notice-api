@@ -1,68 +1,30 @@
-import functools
-from typing import Any, cast
+from datetime import datetime
+from typing import Annotated, Optional
 
-import httpx
-from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Header
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from notice_api.core.config import settings
+from notice_api.auth.db import get_async_session
+from notice_api.auth.schema import Session, User
 
-from .types import OnAfterTokenResponse, StarletteOAuthApp
-
-router = APIRouter()
-
-oauth = OAuth()
-oauth.register(
-    name="google",
-    client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
-    client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
-    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    scope="openid email profile",
-)
-oauth.register(
-    name="nycu",
-    client_id=settings.NYCU_OAUTH_CLIENT_ID,
-    client_secret=settings.NYCU_OAUTH_CLIENT_SECRET,
-    authorize_url="https://id.nycu.edu.tw/o/authorize/",
-    token_endpoint="https://id.nycu.edu.tw/o/token/",
-    scope="profile",
-)
-
-after_token_hooks: dict[str, list[OnAfterTokenResponse]] = {}
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def after_token_response(provider: str):
-    @functools.wraps(after_token_response)
-    def decorator(func: OnAfterTokenResponse):
-        after_token_hooks.setdefault(provider, []).append(func)
-        return func
+@router.get("/users/me")
+async def get_current_user(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    session_token: Annotated[Optional[str], Header(alias="X-Session-Token")] = None,
+) -> Optional[User]:
+    statement = (
+        select(Session, User)
+        .join(User)
+        .where(Session.session_token == session_token)
+        .where(Session.expires > datetime.utcnow())
+    )
+    result = await db.exec(statement)
+    data = result.first()
+    if data is None:
+        return None
 
-    return decorator
-
-
-@after_token_response("nycu")
-async def fetch_ncyu_profile(token: dict[str, Any]):
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            "https://id.nycu.edu.tw/api/profile/",
-            headers={"Authorization": f"Bearer {token['access_token']}"},
-        )
-        response.raise_for_status()
-        token["userinfo"] = response.json()
-
-
-@router.get("/api/auth/login/{provider}")
-async def login(request: Request, provider: str):
-    redirect_uri = request.url_for("oauth_callback", provider=provider)
-    oauth_client = cast(StarletteOAuthApp, oauth.create_client(provider))
-    return await oauth_client.authorize_redirect(request, redirect_uri)
-
-
-@router.get("/api/auth/callback/{provider}")
-async def oauth_callback(request: Request, provider: str):
-    oauth_client = cast(StarletteOAuthApp, oauth.create_client(provider))
-    token = await oauth_client.authorize_access_token(request)
-    for hook in after_token_hooks[provider]:
-        await hook(token)
-
-    return token["userinfo"]
+    return data[1]
