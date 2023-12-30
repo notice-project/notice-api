@@ -27,7 +27,7 @@ def RenamedField(
 class User(SQLModel, table=True):
     """Represents a user of the application which may have one or more accounts."""
 
-    __tablename__: str = "user"
+    __tablename__ = "user"  # pyright: ignore[reportGeneralTypeIssues]
 
     id: str = Field(primary_key=True, nullable=False)
     name: Optional[str] = None
@@ -42,6 +42,8 @@ class User(SQLModel, table=True):
 
 class Account(SQLModel, table=True):
     """Represents an account of a user."""
+
+    __tablename__ = "account"  # pyright: ignore[reportGeneralTypeIssues]
 
     user_id: str = RenamedField(
         column_name="userId",
@@ -68,7 +70,7 @@ class Account(SQLModel, table=True):
 class Session(SQLModel, table=True):
     """Represents an authenticated session of a user."""
 
-    __tablename__: str = "session"
+    __tablename__ = "session"  # pyright: ignore[reportGeneralTypeIssues]
 
     session_token: str = RenamedField(
         column_name="sessionToken",
@@ -87,7 +89,7 @@ class Session(SQLModel, table=True):
 class VerificationToken(SQLModel, table=True):
     """Represents a verification token for a user."""
 
-    __tablename__: str = "verificationToken"
+    __tablename__ = "verificationToken"  # pyright: ignore[reportGeneralTypeIssues]
 
     identifier: str = Field(primary_key=True)
     token: str = Field(primary_key=True)
