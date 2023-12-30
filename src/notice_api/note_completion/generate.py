@@ -6,7 +6,7 @@ from notice_api.note_completion import model
 
 
 def generate_note(transcript: str | Sequence[str], usernote: str) -> str:
-    outcome = model.gen_model(transcript, usernote)
+    outcome = model.generate_note_openai(transcript, usernote)
     return outcome
 
 
