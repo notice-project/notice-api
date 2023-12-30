@@ -112,12 +112,13 @@ check_with_usernote_template = """
 - generated note: ```{generated_note}```
 """
 
+
 def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> str:
     # 去除冗言贅字
-    prompt_template = PromptTemplate(
-        input_variables=["raw_transcript"], template=cleaning_template
-    )
-    chain1 = LLMChain(llm=llm, prompt=prompt_template)
+    # prompt_template = PromptTemplate(
+    #     input_variables=["raw_transcript"], template=cleaning_template
+    # )
+    # chain1 = LLMChain(llm=llm, prompt=prompt_template)
 
     # 整理成條列式
     prompt_template = PromptTemplate(
@@ -126,13 +127,12 @@ def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> s
     chain2 = LLMChain(llm=llm, prompt=prompt_template)
 
     # 這部分你把prompt換成漢字季的筆記對比 我現在先用給我其中三點來測試
-    '''
-    template1 = """give me three important part in this note
-    % note
-    {note}
-    """
-    prompt_template = PromptTemplate(input_variables=["note"], template=template1)
-    chain3 = LLMChain(llm=llm, prompt=prompt_template)'''
+    # template1 = """give me three important part in this note
+    # % note
+    # {note}
+    # """
+    # prompt_template = PromptTemplate(input_variables=["note"], template=template1)
+    # chain3 = LLMChain(llm=llm, prompt=prompt_template)
 
     # 串起三個部分
     # chain1 跑的時間很久目前先拔掉
@@ -154,13 +154,48 @@ def generate_note_openai(transcript: str | Sequence[str], usernote: str):
 
     # 與使用者筆記做對照並標記
     check_with_usernote_prompt = check_with_usernote_template.format(
-        usernote=usernote,
-        generated_note=generated_note
+        usernote=usernote, generated_note=generated_note
     )
     response = OpenAIClient.chat.completions.create(
         model="gpt-3.5-turbo-16k",
         messages=[{"role": "user", "content": check_with_usernote_prompt}],
         temperature=0.0,
+        stream=True,
     )
-    check_result = response.choices[0].message.content
-    return check_result or ''
+
+    check_string = ""  # 用來檢查目前收到的回應是否書要傳出去
+    check_result = "<check result>\n"  # 紀錄完整的模型輸出
+    should_yield = False  # 需要回傳
+    for chunk in response:
+        if chunk.choices[0].delta.content is None:
+            # openai 回應結束
+            break
+        else:
+            current_string = chunk.choices[0].delta.content
+            check_string += chunk.choices[0].delta.content
+            check_result += chunk.choices[0].delta.content
+
+            if (
+                check_string.endswith("<")
+                or check_string.endswith("<Y")
+                or check_string.endswith("<N")
+                or check_string.endswith("<Y>")
+            ):
+                should_yield = False
+
+            if check_string.endswith("<N>"):
+                should_yield = True
+                check_string = ""
+                continue
+            elif "<N>" in check_string:
+                should_yield = True
+                index = check_string.find("<N>")
+                rest_of_string = check_string[index + len("<N>") :]
+                check_string = ""
+                yield rest_of_string
+                continue
+
+            if should_yield:
+                yield current_string
+    yield check_result + "\n"
+    # yield (generated_note or '')+'\n'
