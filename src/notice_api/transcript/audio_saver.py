@@ -44,8 +44,8 @@ class AudioSaver(BinaryIO):
     def __exit__(self, _exc_type, _exc_value, _traceback):
         self.close()
 
-    def write(self, data: bytes):
-        self.writer.write(data)
+    def write(self, data: bytes | bytearray) -> int:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return self.writer.write(data)
 
     def close(self):
         self.writer.close()
