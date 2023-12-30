@@ -10,6 +10,7 @@ import notice_api.utils.logging.core as logging_core
 import notice_api.utils.logging.middlewares as logging_middlewares
 from notice_api.auth.routes import router as auth_router
 from notice_api.core.config import settings
+from notice_api.playback.routes import router as playback_router
 from notice_api.transcript.routes import router as transcribe_router
 
 logging_core.setup_logging(
@@ -50,3 +51,4 @@ def health_check() -> HealthCheckResponse:
 
 app.include_router(auth_router)
 app.include_router(transcribe_router)
+app.include_router(playback_router)
