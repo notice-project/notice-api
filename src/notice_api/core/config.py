@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import AnyHttpUrl, validator
+from pydantic import AnyHttpUrl, MySQLDsn, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,9 +10,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-    API_V1_STR: str = "/api/v1"
-    """API version 1 prefix."""
 
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl | Literal["*"]] = ["*"]
     """List of origins that should be allowed to make CORS requests."""
@@ -30,14 +27,31 @@ class Settings(BaseSettings):
     LOG_JSON_FORMAT: bool = False
     LOG_LEVEL: str = "INFO"
 
-    NYCU_OAUTH_CLIENT_ID: str = ""
-    NYCU_OAUTH_CLIENT_SECRET: str = ""
-    GOOGLE_OAUTH_CLIENT_ID: str = ""
-    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
-    SESSION_SECRET_KEY: str = "secret-key"
-    DEEPGRAM_SECRET_KEY: str = ""
+    SESSION_SECRET_KEY: str = "secret"
 
+    DEEPGRAM_SECRET_KEY: str = ""
     OPENAI_API_KEY: str = ""
+
+    MYSQL_USER: str = "app"
+    MYSQL_PASSWORD: str = "app"
+    MYSQL_DATABASE: str = "db"
+    MYSQL_HOST: str = "localhost"
+    MYSQL_PORT: int = 3306
+
+    @property
+    def DATABASE_URL(self) -> str:
+        """Return the database URL as a string."""
+
+        dsn = MySQLDsn.build(
+            scheme="mysql+asyncmy",
+            username=self.MYSQL_USER,
+            password=self.MYSQL_PASSWORD,
+            host=self.MYSQL_HOST,
+            port=self.MYSQL_PORT,
+            path=self.MYSQL_DATABASE,
+        )
+
+        return str(dsn)
 
 
 # Ignore the issue of "Argument missing for parameter ..." for the Settings class
