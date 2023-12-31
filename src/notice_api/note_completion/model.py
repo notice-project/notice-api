@@ -142,7 +142,9 @@ def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> s
     return overall_chain.run("\n".join(transcript))
 
 
-def generate_note_openai(transcript: str | Sequence[str], usernote: str, temparature: float = 0.7):
+def generate_note_openai(
+    transcript: str | Sequence[str], usernote: str, temparature: float = 0.7
+):
     # 整理成條列式
     note_generation_prompt = note_generation_template.format(
         transcript="\n".join(transcript)
@@ -175,18 +177,22 @@ def generate_note_openai(transcript: str | Sequence[str], usernote: str, tempara
             check_string += chunk.choices[0].delta.content
             check_result += chunk.choices[0].delta.content
 
-            if '<N>' in check_string:
-                index = check_string.find('<N>')
+            if "<N>" in check_string:
+                index = check_string.find("<N>")
                 yield check_string[:index]
-                rest_of_string = check_string[index + len('<N>'):]
+                rest_of_string = check_string[index + len("<N>") :]
                 check_string = rest_of_string
 
-            elif '<' in check_string and '>' in check_string and check_string.find('>') > check_string.find('<'):
-                index = check_string.find('>')
-                rest_of_string = check_string[index + len('>'):]
+            elif (
+                "<" in check_string
+                and ">" in check_string
+                and check_string.find(">") > check_string.find("<")
+            ):
+                index = check_string.find(">")
+                rest_of_string = check_string[index + len(">") :]
                 check_string = rest_of_string
     # 這個 function 最後會 yield 已經篩選過後的筆記
 
     # 以下可以用來 debug 模型原始輸出
-    # yield check_result + "\n" 
+    # yield check_result + "\n"
     # yield '\n' + (generated_note or '')+'\n'
