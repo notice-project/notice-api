@@ -63,6 +63,5 @@ def ping() -> PingResponse:
     return PingResponse()
 
 
-app.include_router(auth_router)
 app.include_router(transcribe_router)
 app.include_router(playback_router)
