@@ -1,27 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any, Callable, Optional
+from datetime import datetime
+from typing import Optional
 
 from pydantic import EmailStr
-from sqlalchemy import Column, ForeignKey, types
+from sqlalchemy import Column, ForeignKey, func, types
 from sqlmodel import Field, SQLModel
-
-
-def RenamedField(
-    column_name: str,
-    sa_type: types.TypeEngine,
-    foreign_key: Optional[str] = None,
-    primary_key: bool = False,
-    nullable: bool = True,
-    default_factory: Optional[Callable[[], Any]] = None,
-):
-    args = [column_name, sa_type]
-    if foreign_key is not None:
-        args.append(ForeignKey(foreign_key))
-
-    sa_column = Column(*args, primary_key=primary_key, nullable=nullable)
-    return Field(default_factory=default_factory, sa_column=sa_column)
 
 
 class User(SQLModel, table=True):
@@ -32,10 +16,10 @@ class User(SQLModel, table=True):
     id: str = Field(primary_key=True, nullable=False)
     name: Optional[str] = None
     email: EmailStr = Field(sa_type=types.String(255), nullable=False)
-    email_verified: date = RenamedField(
-        default_factory=date.today,
-        column_name="emailVerified",
-        sa_type=types.Date(),
+    email_verified: datetime = Field(
+        sa_column=Column(
+            "emailVerified", types.TIMESTAMP, server_default=func.current_timestamp()
+        ),
     )
     image: Optional[str] = None
 
@@ -45,25 +29,26 @@ class Account(SQLModel, table=True):
 
     __tablename__ = "account"  # pyright: ignore[reportGeneralTypeIssues]
 
-    user_id: str = RenamedField(
-        column_name="userId",
-        sa_type=types.String(255),
-        nullable=False,
-        foreign_key="user.id",
+    user_id: str = Field(
+        sa_column=Column(
+            "userId",
+            types.String(255),
+            ForeignKey("user.id"),
+            index=True,
+            nullable=False,
+        ),
     )
     type: str
     provider: str = Field(primary_key=True)
-    provider_account_id: str = RenamedField(
-        column_name="providerAccountId",
-        sa_type=types.String(255),
-        primary_key=True,
+    provider_account_id: str = Field(
+        sa_column=Column("providerAccountId", types.String(255), primary_key=True),
     )
-    refresh_token: Optional[str] = None
-    access_token: Optional[str] = None
+    refresh_token: Optional[str] = Field(None, sa_type=types.Text())
+    access_token: Optional[str] = Field(None, sa_type=types.Text())
     expires_at: Optional[int] = None
     token_type: Optional[str] = None
     scope: Optional[str] = None
-    id_token: Optional[str] = Field(None, sa_type=types.String(2048))
+    id_token: Optional[str] = Field(None, sa_type=types.Text())
     session_state: Optional[str] = None
 
 
@@ -72,18 +57,19 @@ class Session(SQLModel, table=True):
 
     __tablename__ = "session"  # pyright: ignore[reportGeneralTypeIssues]
 
-    session_token: str = RenamedField(
-        column_name="sessionToken",
-        sa_type=types.String(255),
-        primary_key=True,
+    session_token: str = Field(
+        sa_column=Column("sessionToken", types.String(255), primary_key=True),
     )
-    user_id: str = RenamedField(
-        column_name="userId",
-        sa_type=types.String(255),
-        foreign_key="user.id",
-        nullable=False,
+    user_id: str = Field(
+        sa_column=Column(
+            "userId",
+            types.String(255),
+            ForeignKey("user.id"),
+            index=True,
+            nullable=False,
+        ),
     )
-    expires: date
+    expires: datetime = Field(sa_type=types.TIMESTAMP)
 
 
 class VerificationToken(SQLModel, table=True):
@@ -93,4 +79,4 @@ class VerificationToken(SQLModel, table=True):
 
     identifier: str = Field(primary_key=True)
     token: str = Field(primary_key=True)
-    expires: date
+    expires: datetime = Field(sa_type=types.TIMESTAMP)
