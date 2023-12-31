@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlmodel import select
@@ -10,7 +10,7 @@ from notice_api.db import AsyncSession, get_async_session
 
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-    session_token: Annotated[Optional[str], Header(alias="X-Session-Token")] = None,
+    session_token: Annotated[str, Header(alias="X-Session-Token")],
 ) -> User:
     """Get the current user from the database.
 
