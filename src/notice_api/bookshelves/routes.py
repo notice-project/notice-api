@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import col, select
 
 from notice_api.auth.deps import get_current_user
@@ -16,6 +17,7 @@ from notice_api.bookshelves.schema import (
     BookshelfUpdate,
 )
 from notice_api.db import AsyncSession, get_async_session
+from notice_api.notes.schema import Note
 
 router = APIRouter(prefix="/bookshelves", tags=["bookshelves"])
 
@@ -43,11 +45,12 @@ async def get_bookshelves(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     cursor: Optional[str] = None,
-    limit: int = 10,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
     order: Literal["asc", "desc"] = "desc",
     sort: Literal["title", "created_at"] = "created_at",
 ) -> GetBookshelvesResponse:
-    statement = select(Bookshelf).where(Bookshelf.user_id == user.id).limit(limit)
+    # Fetch one more than the limit to determine if there are more results.
+    statement = select(Bookshelf).where(Bookshelf.user_id == user.id).limit(limit + 1)
 
     # First sort by the `sort` parameter, then by the `id` column
     # (`id`: to achieve deterministic ordering).
@@ -88,11 +91,27 @@ async def get_bookshelves(
         statement = statement.where((sort_eq & id_gt) | sort_filter)
 
     result = await db.exec(statement)
-    bookshelves = [BookshelfRead.model_validate(bookshelf) for bookshelf in result]
+    bookshelves = [
+        BookshelfRead.model_validate({**bookshelf.model_dump(), "count": 0})
+        for bookshelf in result
+    ]
+
+    bookshelf_ids = [bookshelf.id for bookshelf in bookshelves[:limit]]
+    statement = (
+        select(func.count(), Note.bookshelf_id)
+        .select_from(Note)
+        .where(col(Note.bookshelf_id).in_(bookshelf_ids))
+        .group_by(col(Note.bookshelf_id))
+    )
+    result = await db.exec(statement)
+    for count, bookshelf_id in result:
+        for bookshelf in bookshelves:
+            if bookshelf.id == bookshelf_id:
+                bookshelf.count = count
 
     next_cursor = None
-    if len(bookshelves) == limit:
-        last_bookshelf = bookshelves[-1]
+    if len(bookshelves) > limit:
+        last_bookshelf = bookshelves[-2]
         next_cursor = BookshelfCursor(
             id=last_bookshelf.id,
             title=last_bookshelf.title,
@@ -100,7 +119,7 @@ async def get_bookshelves(
         ).encode()
 
     return GetBookshelvesResponse(
-        data=bookshelves,
+        data=bookshelves[:limit],
         next_cursor=next_cursor,
     )
 
