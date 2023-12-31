@@ -141,12 +141,7 @@ async def update_bookshelf(
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> UpdateBookshelfResponse:
     bookshelf = await db.get(Bookshelf, bookshelf_id)
-    if not bookshelf:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bookshelf not found",
-        )
-    if bookshelf.user_id != user.id:
+    if bookshelf is None or bookshelf.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
@@ -167,12 +162,7 @@ async def delete_bookshelf(
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> None:
     bookshelf = await db.get(Bookshelf, bookshelf_id)
-    if not bookshelf:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bookshelf not found",
-        )
-    if bookshelf.user_id != user.id:
+    if bookshelf is None or bookshelf.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
