@@ -57,57 +57,59 @@ note_generation_template = """
             ...
         "
         - example output: "
-            - Introduction to Algorithms
-                - Lecture two
-                - Erik Demaine loves algorithms
-            - Data Structures
-                - Sequences, sets, linked lists, dynamic arrays
-                - Simple data structures
-                - Beginning of several data structures
-            - Interface vs Data Structure
-                - Interface specifies what you want to do
-                - Data structure specifies how to do it
-            - Operations on Data Structures
-                - Storing data
-                - Specifying operations and their meanings
-                - Algorithms for supporting operations
-            - Two main interfaces: set and sequence
-                - Set: maintaining data in sorted order, searching for a key
-                - Sequence: maintaining a particular sequence, storing n things
-            - Two main approaches: arrays and pointers
-            - Static Sequence Interface
-                - Number of items doesn't change
-                - Operations: build, length, iteration, get, set
-            - Static Array
-                - Solution to the static sequence interface problem
-                - No static arrays in Python, only dynamic arrays
-            - Word RAM model of computation
+- Introduction to Algorithms lecture two
+    - Erik Demaine loves algorithms
+    - Today's topic: data structures
+        - Multiple algorithms for free within data structures
+    - Sequences, sets, linked lists, dynamic arrays
+- Data Structures
+    - Introduction to simple data structures
+    - Difference between interface and data structure
+        - Interface specifies what you want to do
+        - Data structure specifies how to do it
+    - Storing data and operations on data
+        - Interface specifies what data can be stored
+        - Data structure provides algorithms for supporting operations
+    - Focus on two main interfaces: set and sequence
+        - Set: store and search for values
+        - Sequence: maintain a particular order of values
+- Sequence Data Structure
+    - Store n arbitrary things
+    - Care about values and maintaining order
+    - Today's focus: sequence data structure
+- Static Sequence Interface
+    - Number of items doesn't change
+    - Operations: build, length, iteration, get, set
+    - Build: create a new static sequence with specified items and order
+    - Length: get the number of items in the sequence
+    - Iteration: iterate through the items in the sequence
+    - Get: retrieve the value at a specific index in the sequence
+    - Set: update the value at a specific index in the sequence
         "
 
 - transcript ```{transcript}```
 """
 
 check_with_usernote_template = """
-- task: Classify if each line in the generated note is mentioned in the user note
+- task: Compare each line in the generated note with lines in the user knowledge
     - input:
-        - user note: ```(usernote)```
-        - generated note: ```(generated_note)```
+        - the user knowledge, which will be marked as such: - user knowledge ```(user knowledge content)```
+        - the generated note, which will be marked as such: - generated note ```(generated note content)```
     - output:
-        - output the whole generated note, but at the start of each line, add an indicator that is either <Y> or <N>
-        - add <Y> if this line is mentioned in the user note
-        - add <N> if this line is NOT mentioned in the user note
-        - a line is mentioned in the user note if it is contextually related or can be implied by the user note
-        - If classified as <Y>, change it to <N> if this line has sub-points classified as <N>.
+        - output each line in the generated note content, but at the end of each line, tell me the user knowledge which that generated note is referencing using a tag like such: <(referenced user knowledge)>
+            - if you can't find any, output <N>
+            - the <(referenced user knowledge)> tag STRICTLY ONLY contains lines from the input user knowledge, everything outside "- user knowledge ```(user knowledge content)```" is NOT user knowledge
+        - don't output anything else besides the tags and the original lines from the generated note
         - example output: "
-<N> - Static sequence interface
-<Y>     - Number of items doesn't change
-<N>     - Static array is the natural solution to this interface problem
-<Y>         - Data structures can be considered solutions
-<N>         - Memory is an array of w-bit words
-<Y>     - Operations: build, length, iteration, get, set
-                    "
+- Static sequence interface <N>
+     - Number of items doesn't change <"- the number of items does not change">
+     - Static array is the natural solution to this interface problem <N>
+         - Data structures can be considered solutions <"- the data structures are the solutions to these kinds of problems">
+         - Memory is an array of w-bit words <N>
+     - Operations: build, length, iteration, get, set <"- for this case, we need operations build, length, iteration, get and set">
+        "
 
-- user note: ```{usernote}```
+- user knowledge: ```{usernote}```
 
 - generated note: ```{generated_note}```
 """
@@ -140,7 +142,7 @@ def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> s
     return overall_chain.run("\n".join(transcript))
 
 
-def generate_note_openai(transcript: str | Sequence[str], usernote: str):
+def generate_note_openai(transcript: str | Sequence[str], usernote: str, temparature: float = 0.7):
     # 整理成條列式
     note_generation_prompt = note_generation_template.format(
         transcript="\n".join(transcript)
@@ -148,7 +150,7 @@ def generate_note_openai(transcript: str | Sequence[str], usernote: str):
     response = OpenAIClient.chat.completions.create(
         model="gpt-3.5-turbo-16k",
         messages=[{"role": "user", "content": note_generation_prompt}],
-        temperature=0.5,
+        temperature=temparature,
     )
     generated_note = response.choices[0].message.content
 
@@ -165,37 +167,26 @@ def generate_note_openai(transcript: str | Sequence[str], usernote: str):
 
     check_string = ""  # 用來檢查目前收到的回應是否書要傳出去
     check_result = "<check result>\n"  # 紀錄完整的模型輸出
-    should_yield = False  # 需要回傳
     for chunk in response:
         if chunk.choices[0].delta.content is None:
             # openai 回應結束
             break
         else:
-            current_string = chunk.choices[0].delta.content
             check_string += chunk.choices[0].delta.content
             check_result += chunk.choices[0].delta.content
 
-            if (
-                check_string.endswith("<")
-                or check_string.endswith("<Y")
-                or check_string.endswith("<N")
-                or check_string.endswith("<Y>")
-            ):
-                should_yield = False
+            if '<N>' in check_string:
+                index = check_string.find('<N>')
+                yield check_string[:index]
+                rest_of_string = check_string[index + len('<N>'):]
+                check_string = rest_of_string
 
-            if check_string.endswith("<N>"):
-                should_yield = True
-                check_string = ""
-                continue
-            elif "<N>" in check_string:
-                should_yield = True
-                index = check_string.find("<N>")
-                rest_of_string = check_string[index + len("<N>") :]
-                check_string = ""
-                yield rest_of_string
-                continue
+            elif '<' in check_string and '>' in check_string and check_string.find('>') > check_string.find('<'):
+                index = check_string.find('>')
+                rest_of_string = check_string[index + len('>'):]
+                check_string = rest_of_string
+    # 這個 function 最後會 yield 已經篩選過後的筆記
 
-            if should_yield:
-                yield current_string
-    yield check_result + "\n"
-    # yield (generated_note or '')+'\n'
+    # 以下可以用來 debug 模型原始輸出
+    # yield check_result + "\n" 
+    # yield '\n' + (generated_note or '')+'\n'
