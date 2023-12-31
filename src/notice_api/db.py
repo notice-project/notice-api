@@ -8,10 +8,11 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import notice_api.auth.schema as auth_schema  # noqa: F401
+import notice_api.bookshelves.schema as bookshelves_schema  # noqa: F401
 import notice_api.notes.schema as notes_schema  # noqa: F401
 from notice_api.core.config import settings
 
-engine = create_async_engine(settings.DATABASE_URL, future=True)
+engine = create_async_engine(settings.DATABASE_URL, future=True, echo=True)
 AsyncSessionFactory = sessionmaker[AsyncSession](  # pyright: ignore[reportGeneralTypeIssues]
     engine,  # pyright: ignore[reportGeneralTypeIssues]
     class_=AsyncSession,

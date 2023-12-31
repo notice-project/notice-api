@@ -6,8 +6,8 @@ from sqlalchemy import func
 from sqlmodel import Field, SQLModel
 
 
-class Bookshelf(SQLModel, table=True):
-    """A bookshelf for the associated user."""
+class Note(SQLModel, table=True):
+    """A note for the associated user."""
 
     __tablename__ = "bookshelf"  # pyright: ignore[reportGeneralTypeIssues]
 
