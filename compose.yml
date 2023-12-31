@@ -11,18 +11,5 @@ services:
     ports:
       - 3306:3306
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2023-12-14T18-51-57Z
-    container_name: minio
-    env_file:
-      - .env
-    volumes:
-      - minio-data:/data
-    ports:
-      - 9000:9000
-      - 9090:9090
-    command: server /data --console-address ":9090"
-
 volumes:
   mysql-data:
-  minio-data:
