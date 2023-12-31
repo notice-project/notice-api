@@ -42,6 +42,7 @@ class BookshelfRead(BookshelfBase):
 
     id: UUID
     created_at: datetime
+    count: int
 
 
 class BookshelfUpdate(SQLModel):
