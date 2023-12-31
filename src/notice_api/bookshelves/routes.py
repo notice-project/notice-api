@@ -129,13 +129,17 @@ async def create_bookshelf(
     return CreateBookshelfResponse(data=BookshelfRead.model_validate(bookshelf))
 
 
+class UpdateBookshelfResponse(BaseModel):
+    data: BookshelfRead
+
+
 @router.patch("/{bookshelf_id}")
 async def update_bookshelf(
     bookshelf_id: UUID,
     bookshelf_update: BookshelfUpdate,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> Bookshelf:
+) -> UpdateBookshelfResponse:
     bookshelf = await db.get(Bookshelf, bookshelf_id)
     if not bookshelf:
         raise HTTPException(
@@ -153,7 +157,7 @@ async def update_bookshelf(
 
     await db.commit()
     await db.refresh(bookshelf)
-    return bookshelf
+    return UpdateBookshelfResponse(data=BookshelfRead.model_validate(bookshelf))
 
 
 @router.delete("/{bookshelf_id}", status_code=status.HTTP_204_NO_CONTENT)
