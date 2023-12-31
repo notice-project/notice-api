@@ -10,8 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import notice_api.utils.logging.core as logging_core
 import notice_api.utils.logging.middlewares as logging_middlewares
-from notice_api.auth.db import create_db_and_tables
-from notice_api.auth.routes import router as auth_router
+from notice_api import db
 from notice_api.core.config import settings
 from notice_api.playback.routes import router as playback_router
 from notice_api.transcript.routes import router as transcribe_router
@@ -27,7 +26,7 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for the application."""
 
     logger = structlog.get_logger("lifespan")
-    await create_db_and_tables()
+    await db.create_db_and_tables()
     logger.info("Finished creating database tables.")
     yield
 
