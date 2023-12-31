@@ -1,11 +1,11 @@
 from base64 import b64decode, b64encode
 from datetime import datetime
-from typing import Annotated, Literal, Optional, Sequence
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlmodel import and_, col, or_, select
+from sqlmodel import col, select
 
 from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
@@ -34,7 +34,7 @@ class BookshelfCursor(BaseModel):
 
 
 class GetBookshelvesResponse(BaseModel):
-    data: Sequence[BookshelfRead]
+    data: list[BookshelfRead]
     next_cursor: Optional[str] = None
 
 
@@ -51,26 +51,23 @@ async def get_bookshelves(
 
     # First sort by the `sort` parameter, then by the `id` column
     # (`id`: to achieve deterministic ordering).
-    primary_order = (
+    sort_order = (
         col(getattr(Bookshelf, sort)).desc()
         if order == "desc"
         else col(getattr(Bookshelf, sort)).asc()
     )
-    secondary_order = col(Bookshelf.id).asc()
-    statement = statement.order_by(primary_order, secondary_order)
+    id_order = col(Bookshelf.id).asc()
+    statement = statement.order_by(sort_order, id_order)
 
     if cursor:
         # Decode the cursor and use it to skip the rows that have already been
         # returned.
-        bookshelf_cursor = BookshelfCursor.decode(cursor)
-        if sort == "title" and bookshelf_cursor.title is not None:
-            sort_value = bookshelf_cursor.title
-        elif sort == "created_at" and bookshelf_cursor.created_at is not None:
-            sort_value = bookshelf_cursor.created_at
-        else:
+        cursor_obj = BookshelfCursor.decode(cursor)
+        sort_value = getattr(cursor_obj, sort)
+        if sort_value is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid cursor",
+                detail=f"Invalid cursor: {cursor}",
             )
 
         # Example: sort = "title", order = "desc", sort_value = "B"
@@ -82,13 +79,13 @@ async def get_bookshelves(
         #   (Bookshelf.title = "B" AND Bookshelf.id > bookshelf_cursor.id)
         #   OR Bookshelf.title < "B"
         sort_eq = col(getattr(Bookshelf, sort)) == sort_value
-        id_gt = col(Bookshelf.id) > bookshelf_cursor.id
+        id_gt = col(Bookshelf.id) > cursor_obj.id
         sort_filter = (
             col(getattr(Bookshelf, sort)) < sort_value
             if order == "desc"
             else col(getattr(Bookshelf, sort)) > sort_value
         )
-        statement = statement.where(or_(and_(sort_eq, id_gt), sort_filter))
+        statement = statement.where((sort_eq & id_gt) | sort_filter)
 
     result = await db.exec(statement)
     bookshelves = [BookshelfRead.model_validate(bookshelf) for bookshelf in result]
@@ -112,11 +109,7 @@ class CreateBookshelfResponse(BaseModel):
     data: BookshelfRead
 
 
-@router.post(
-    "/",
-    response_model=CreateBookshelfResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_bookshelf(
     bookshelf_create: BookshelfCreate,
     user: Annotated[User, Depends(get_current_user)],
@@ -143,8 +136,8 @@ async def update_bookshelf(
     bookshelf = await db.get(Bookshelf, bookshelf_id)
     if bookshelf is None or bookshelf.user_id != user.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bookshelf {bookshelf_id} not found",
         )
 
     if bookshelf_update.title is not None:
@@ -164,8 +157,8 @@ async def delete_bookshelf(
     bookshelf = await db.get(Bookshelf, bookshelf_id)
     if bookshelf is None or bookshelf.user_id != user.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bookshelf {bookshelf_id} not found",
         )
 
     await db.delete(bookshelf)
