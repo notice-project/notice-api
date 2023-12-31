@@ -143,7 +143,7 @@ def generate_note_langchain(transcript: str | Sequence[str], usernote: str) -> s
 
 
 def generate_note_openai(
-    transcript: str | Sequence[str], usernote: str, temparature: float = 0.7
+    transcript: str | Sequence[str], usernote: str, temperature: float = 0.7
 ):
     # 整理成條列式
     note_generation_prompt = note_generation_template.format(
@@ -152,7 +152,7 @@ def generate_note_openai(
     response = OpenAIClient.chat.completions.create(
         model="gpt-3.5-turbo-16k",
         messages=[{"role": "user", "content": note_generation_prompt}],
-        temperature=temparature,
+        temperature=temperature,
     )
     generated_note = response.choices[0].message.content
 
