@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Annotated, Generator, Protocol
+from uuid import UUID
 
 import structlog
 from deepgram.transcription import LiveTranscriptionResponse
@@ -17,9 +18,9 @@ class TranscriptResultSaver(Protocol):
 
 
 class InMemoryTranscriptResultSaver:
-    def __init__(self, db: AsyncSession, note: Note):
+    def __init__(self, db: AsyncSession, note_id: UUID):
         self.db: AsyncSession = db
-        self.note: Note = note
+        self.note_id: UUID = note_id
         self.transcripts: list[str] = []
         self.timestamps: list[float] = []
 
@@ -39,7 +40,7 @@ class InMemoryTranscriptResultSaver:
         self.timestamps.append(start_time)
 
         new_transcript = Transcript(
-            note_id=self.note.id,
+            note_id=self.note_id,
             text=transcript,
             timestamp=timestamp,
         )
@@ -58,7 +59,7 @@ def get_transcript_result_saver(
     note: Annotated[Note, Depends(get_notes)],
 ) -> Generator[TranscriptResultSaver, None, None]:
     logger = structlog.get_logger("result_saver")
-    saver = InMemoryTranscriptResultSaver(db=db, note=note)
+    saver = InMemoryTranscriptResultSaver(db=db, note_id=note.id)
     yield saver
     logger.info(
         "Transcript saved",
