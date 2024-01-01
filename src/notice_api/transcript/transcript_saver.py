@@ -31,9 +31,13 @@ class DatabaseTranscriptResultSaver:
 
     async def save_transcript(self, result: LiveTranscriptionResponse):
         logger = structlog.get_logger("result_saver")
-        transcript = result["channel"]["alternatives"][0]["transcript"]
-        start_time = result["start"]
-        timestamp = timedelta(seconds=start_time)
+        try:
+            transcript = result["channel"]["alternatives"][0]["transcript"]
+            start_time = result["start"]
+            timestamp = timedelta(seconds=start_time)
+        except KeyError:
+            logger.error("Failed to parse transcript result.", result=result)
+            return
 
         if len(transcript) <= 0:
             return

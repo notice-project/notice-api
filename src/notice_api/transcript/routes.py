@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -49,8 +50,16 @@ async def handle_live_transcription(
         audio_saver: AudioSaver | None = None
         while True:
             message = await ws.receive()
-            match message:
-                case {"text": {"type": "start"}}:
+            if (b := message.get("bytes")) is not None:
+                logger.info("Received audio bytes", length=len(b))
+                if audio_saver is not None:
+                    audio_saver.write(b)
+                deepgram_live.send(b)
+                logger.info("Sent audio bytes to deepgram")
+                continue
+
+            match json.loads(message["text"]):
+                case {"type": "start"}:
                     filename = str(uuid4())
                     logger.info("Received start message", filename=filename)
                     conn = await db.connection()
@@ -59,13 +68,6 @@ async def handle_live_transcription(
                         (filename, note_id),
                     )
                     audio_saver = AudioSaver(filename=filename)
-                case {"text": {"type": "stop"}}:
+                case {"type": "stop"}:
                     logger.info("Received stop message")
                     return
-                case {"bytes": b}:
-                    logger.info(
-                        "Received audio bytes", length=len(b), audio_saver=audio_saver
-                    )
-                    if audio_saver is not None:
-                        audio_saver.write(b)
-                    deepgram_live.send(b)
