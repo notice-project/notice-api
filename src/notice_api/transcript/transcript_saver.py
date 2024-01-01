@@ -54,7 +54,7 @@ def get_transcript_result_saver(
     note: Annotated[Note, Depends(get_notes)],
 ) -> Generator[TranscriptResultSaver, None, None]:
     logger = structlog.get_logger("result_saver")
-    saver = InMemoryTranscriptResultSaver(db=db, note_id=note.id) # type: ignore
+    saver = InMemoryTranscriptResultSaver(db=db, note_id=note.id) # type: ignore[assignment,arg-type]
     yield saver
     logger.info(
         "Transcript saved",
