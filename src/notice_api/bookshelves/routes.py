@@ -49,8 +49,20 @@ async def get_bookshelves(
     order: Literal["asc", "desc"] = "desc",
     sort: Literal["title", "created_at"] = "created_at",
 ) -> GetBookshelvesResponse:
-    # Fetch one more than the limit to determine if there are more results.
-    statement = select(Bookshelf).where(Bookshelf.user_id == user.id).limit(limit + 1)
+    note_count_subquery = (
+        select(func.count())
+        .select_from(Note)
+        .where(Note.bookshelf_id == Bookshelf.id)
+        .scalar_subquery()
+        .label("note_count")
+    )
+    # Intentionally select one more than the limit to determine if there are
+    # more results.
+    statement = (
+        select(Bookshelf, note_count_subquery)
+        .where(Bookshelf.user_id == user.id)
+        .limit(limit + 1)
+    )
 
     # First sort by the `sort` parameter, then by the `id` column
     # (`id`: to achieve deterministic ordering).
@@ -92,22 +104,14 @@ async def get_bookshelves(
 
     result = await db.exec(statement)
     bookshelves = [
-        BookshelfRead.model_validate({**bookshelf.model_dump(), "count": 0})
-        for bookshelf in result
+        BookshelfRead.model_validate(
+            {
+                **bookshelf.model_dump(),
+                "count": count,
+            }
+        )
+        for bookshelf, count in result
     ]
-
-    bookshelf_ids = [bookshelf.id for bookshelf in bookshelves[:limit]]
-    statement = (
-        select(func.count(), Note.bookshelf_id)
-        .select_from(Note)
-        .where(col(Note.bookshelf_id).in_(bookshelf_ids))
-        .group_by(col(Note.bookshelf_id))
-    )
-    result = await db.exec(statement)
-    for count, bookshelf_id in result:
-        for bookshelf in bookshelves:
-            if bookshelf.id == bookshelf_id:
-                bookshelf.count = count
 
     next_cursor = None
     if len(bookshelves) > limit:
