@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlmodel import col, select
 
@@ -40,14 +40,14 @@ async def get_notes(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     cursor: Optional[str] = None,
-    limit: int = 10,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
     order: Literal["asc", "desc"] = "desc",
     sort: Literal["title", "created_at"] = "created_at",
 ) -> GetNotesResponse:
     statement = (
         select(col(Note.id), col(Note.title), col(Note.created_at))
         .where(col(Note.user_id) == user.id, col(Note.bookshelf_id) == bookshelf_id)
-        .limit(limit)
+        .limit(limit + 1)
     )
 
     # First sort by the `sort` parameter, then by the `id` column
@@ -82,14 +82,18 @@ async def get_notes(
     notes = [NoteRead.model_validate(note) for note in notes]
 
     next_cursor = None
-    if len(notes) == limit:
+    if len(notes) > limit:
+        last_note = notes[-2]
         next_cursor = NoteCursor(
-            id=notes[-1].id,
-            title=notes[-1].title,
-            created_at=notes[-1].created_at,
+            id=last_note.id,
+            title=last_note.title,
+            created_at=last_note.created_at,
         ).encode()
 
-    return GetNotesResponse(data=notes, next_cursor=next_cursor)
+    return GetNotesResponse(
+        data=notes[:limit],
+        next_cursor=next_cursor,
+    )
 
 
 class CreateNoteResponse(BaseModel):
