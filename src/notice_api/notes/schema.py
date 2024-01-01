@@ -2,14 +2,30 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, types
 from sqlmodel import Field, SQLModel
+from typing_extensions import TypedDict
 
 
 class NoteBase(SQLModel):
     """Base model for a note."""
 
     title: str
+
+
+class NoteContent(TypedDict):
+    id: str
+    type: str
+    value: str
+    children: list["NoteContent"]
+
+
+DEFAULT_NOTE_CONTENT: NoteContent = {
+    "id": "root",
+    "type": "RootNode",
+    "value": "",
+    "children": [],
+}
 
 
 class Note(NoteBase, table=True):
@@ -23,6 +39,10 @@ class Note(NoteBase, table=True):
         sa_column_kwargs={"default": func.uuid()},
     )
     title: str
+    content: NoteContent = Field(
+        default=DEFAULT_NOTE_CONTENT,
+        sa_type=types.JSON(none_as_null=True),
+    )
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": func.now()}
     )

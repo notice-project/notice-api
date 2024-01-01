@@ -1,9 +1,11 @@
+import json
 from base64 import b64decode, b64encode
 from datetime import datetime
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal, Optional, cast, overload
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
 from pydantic import BaseModel
 from sqlmodel import col, select
 
@@ -11,7 +13,7 @@ from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
 from notice_api.notes.deps import get_current_note
-from notice_api.notes.schema import Note, NoteCreate, NoteRead
+from notice_api.notes.schema import Note, NoteContent, NoteCreate, NoteRead
 
 router = APIRouter(prefix="/bookshelves/{bookshelf_id}/notes", tags=["notes"])
 
@@ -141,3 +143,152 @@ async def delete_note(
 ):
     await db.delete(note)
     await db.commit()
+
+
+@overload
+async def get_note_content(
+    note_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[NoteContent]:
+    ...
+
+
+@overload
+async def get_note_content(
+    note_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    index: int,
+) -> NoteContent:
+    ...
+
+
+async def get_note_content(
+    note_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    index: Optional[int] = None,
+) -> list[NoteContent] | NoteContent:
+    conn = await db.connection()
+    if index is None:
+        statement = "SELECT `content` ->> '$.children' FROM note WHERE id = %s"
+        parameters = (note_id.hex,)
+    else:
+        statement = "SELECT `content` ->> '$.children[%s]' FROM note WHERE id = %s"
+        parameters = (index, note_id.hex)
+
+    result = await conn.exec_driver_sql(statement, parameters)
+    for (row,) in result:
+        return json.loads(row)
+
+    return []
+
+
+@router.websocket("/{note_id}/ws")
+async def take_note(
+    websocket: WebSocket,
+    bookshelf_id: UUID,
+    note_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    logger = structlog.get_logger("take_note")
+    await websocket.accept()
+
+    message = await websocket.receive_json()
+    match message:
+        case {"type": "init", "payload": session_token}:
+            user = await get_current_user(db, session_token=session_token)
+        case _:
+            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+            return
+
+    note = await get_current_note(
+        bookshelf_id=bookshelf_id,
+        note_id=note_id,
+        user=user,
+        db=db,
+    )
+    content = await get_note_content(note_id=note_id, db=db)
+
+    note_content = NoteContent(
+        id="root",
+        type="RootNode",
+        value=note.title,
+        children=content,
+    )
+    await websocket.send_json({"type": "note", "payload": note_content})
+
+    while True:
+        data = await websocket.receive_json()
+        match data:
+            case {"type": "update", "payload": {"index": index, "content": content}}:
+                logger.info("Received update", note_id=note.id, index=index)
+                content = json.dumps(content)
+                id = cast(UUID, note.id).hex
+                conn = await db.connection()
+                await conn.exec_driver_sql(
+                    """
+                    UPDATE
+                        note
+                    SET
+                        `content` = JSON_SET(`content`, '$.children[%s]', CAST(%s AS JSON))
+                    WHERE
+                        id = %s
+                    """,
+                    (index, content, id),
+                )
+                await db.commit()
+                conn = await db.connection()
+                updated_content = await get_note_content(
+                    note_id=note_id, db=db, index=index
+                )
+                logger.info("Note updated", note_id=note.id, index=index)
+                await websocket.send_json(
+                    {"type": "update", "payload": updated_content}
+                )
+            case {"type": "update all", "payload": new_children}:
+                logger.info(
+                    "Received full update",
+                    note_id=note.id,
+                    children_count=len(new_children),
+                )
+                new_children = json.dumps(new_children)
+                conn = await db.connection()
+                await conn.exec_driver_sql(
+                    """
+                    UPDATE
+                        note
+                    SET
+                        `content` = JSON_SET(`content`, '$.children', CAST(%s AS JSON))
+                    WHERE
+                        id = %s
+                    """,
+                    (new_children, cast(UUID, note.id).hex),
+                )
+                await db.commit()
+                conn = await db.connection()
+                updated_content = await get_note_content(note_id=note_id, db=db)
+                logger.info(
+                    "Full update complete",
+                    note_id=note.id,
+                    children_count=len(updated_content),
+                )
+                await websocket.send_json(
+                    {"type": "update", "payload": updated_content}
+                )
+            case {"type": "update title", "payload": new_title}:
+                logger.info("Received title update", note_id=note.id, title=new_title)
+                conn = await db.connection()
+                await conn.exec_driver_sql(
+                    """
+                    UPDATE
+                        note
+                    SET
+                        `title` = %s
+                    WHERE
+                        id = %s
+                    """,
+                    (new_title, cast(UUID, note.id).hex),
+                )
+                await db.commit()
+                logger.info("Title updated", note_id=note.id, title=new_title)
+            case _:
+                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
