@@ -15,6 +15,43 @@ from notice_api.notes.schema import Note, NoteCreate, NoteRead
 router = APIRouter(prefix="/bookshelves/{bookshelf_id}/notes", tags=["notes"])
 
 
+async def get_current_note(
+    bookshelf_id: UUID,
+    note_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    """Get the current note from the database.
+
+    This function is used as a dependency for endpoints that require a note.
+
+    If the note is not found, or the note does not belong to the current user,
+    a 404 error is raised.
+    """
+
+    statement = select(Note.id, Note.title, Note.created_at).where(
+        col(Note.id) == note_id,
+        col(Note.user_id) == user.id,
+        col(Note.bookshelf_id) == bookshelf_id,
+    )
+    result = await db.exec(statement)
+    note = result.first()
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note {note_id} not found",
+        )
+
+    id, title, created_at = note
+    return Note(
+        id=id,
+        title=title,
+        created_at=created_at,
+        user_id=user.id,
+        bookshelf_id=bookshelf_id,
+    )
+
+
 class NoteCursor(BaseModel):
     id: UUID
     title: Optional[str] = None
@@ -119,19 +156,10 @@ class UpdateNoteResponse(BaseModel):
 
 @router.patch("/{note_id}")
 async def update_note(
-    bookshelf_id: UUID,
-    note_id: UUID,
+    note: Annotated[Note, Depends(get_current_note)],
     note_update: NoteCreate,
-    user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> UpdateNoteResponse:
-    note = await db.get(Note, note_id)
-    if note is None or note.user_id != user.id or note.bookshelf_id != bookshelf_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note {note_id} not found",
-        )
-
     note.title = note_update.title
     await db.commit()
     await db.refresh(note)
@@ -140,17 +168,8 @@ async def update_note(
 
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_note(
-    bookshelf_id: UUID,
-    note_id: UUID,
-    user: Annotated[User, Depends(get_current_user)],
+    note: Annotated[Note, Depends(get_current_note)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    note = await db.get(Note, note_id)
-    if note is None or note.user_id != user.id or note.bookshelf_id != bookshelf_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note {note_id} not found",
-        )
-
     await db.delete(note)
     await db.commit()
