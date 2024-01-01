@@ -5,7 +5,6 @@ import structlog
 from deepgram.transcription import LiveTranscriptionResponse
 from fastapi import Depends
 
-from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
 from notice_api.notes.routes import get_notes
 from notice_api.notes.schema import Note
@@ -18,12 +17,11 @@ class TranscriptResultSaver(Protocol):
 
 
 class InMemoryTranscriptResultSaver:
-    def __init__(self, db: AsyncSession, user: User, note: Note):
+    def __init__(self, db: AsyncSession, note: Note):
         self.db: AsyncSession = db
         self.note: Note = note
         self.transcripts: list[str] = []
         self.timestamps: list[float] = []
-        self.index: int = 0
 
     async def save_transcript(
         self,
@@ -42,7 +40,6 @@ class InMemoryTranscriptResultSaver:
 
         new_transcript = Transcript(
             note_id=self.note.id,
-            id=self.index,
             text=transcript,
             timestamp=timestamp,
         )
@@ -51,7 +48,6 @@ class InMemoryTranscriptResultSaver:
             self.db.add(new_transcript)
             await self.db.commit()
             await self.db.refresh(new_transcript)
-            self.index += 1
             logger.info("Transcript saved successfully.")
         except Exception as e:
             logger.error(f"Failed to save transcript. Error: {e}")
