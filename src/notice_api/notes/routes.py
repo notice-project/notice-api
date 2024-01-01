@@ -3,53 +3,17 @@ from datetime import datetime
 from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlmodel import col, select
 
 from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
+from notice_api.notes.deps import get_current_note
 from notice_api.notes.schema import Note, NoteCreate, NoteRead
 
 router = APIRouter(prefix="/bookshelves/{bookshelf_id}/notes", tags=["notes"])
-
-
-async def get_current_note(
-    bookshelf_id: UUID,
-    note_id: UUID,
-    user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-):
-    """Get the current note from the database.
-
-    This function is used as a dependency for endpoints that require a note.
-
-    If the note is not found, or the note does not belong to the current user,
-    a 404 error is raised.
-    """
-
-    statement = select(Note.id, Note.title, Note.created_at).where(
-        col(Note.id) == note_id,
-        col(Note.user_id) == user.id,
-        col(Note.bookshelf_id) == bookshelf_id,
-    )
-    result = await db.exec(statement)
-    note = result.first()
-    if note is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note {note_id} not found",
-        )
-
-    id, title, created_at = note
-    return Note(
-        id=id,
-        title=title,
-        created_at=created_at,
-        user_id=user.id,
-        bookshelf_id=bookshelf_id,
-    )
 
 
 class NoteCursor(BaseModel):
@@ -76,14 +40,14 @@ async def get_notes(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     cursor: Optional[str] = None,
-    limit: int = 10,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
     order: Literal["asc", "desc"] = "desc",
     sort: Literal["title", "created_at"] = "created_at",
 ) -> GetNotesResponse:
     statement = (
         select(col(Note.id), col(Note.title), col(Note.created_at))
         .where(col(Note.user_id) == user.id, col(Note.bookshelf_id) == bookshelf_id)
-        .limit(limit)
+        .limit(limit + 1)
     )
 
     # First sort by the `sort` parameter, then by the `id` column
@@ -118,14 +82,18 @@ async def get_notes(
     notes = [NoteRead.model_validate(note) for note in notes]
 
     next_cursor = None
-    if len(notes) == limit:
+    if len(notes) > limit:
+        last_note = notes[-2]
         next_cursor = NoteCursor(
-            id=notes[-1].id,
-            title=notes[-1].title,
-            created_at=notes[-1].created_at,
+            id=last_note.id,
+            title=last_note.title,
+            created_at=last_note.created_at,
         ).encode()
 
-    return GetNotesResponse(data=notes, next_cursor=next_cursor)
+    return GetNotesResponse(
+        data=notes[:limit],
+        next_cursor=next_cursor,
+    )
 
 
 class CreateNoteResponse(BaseModel):
