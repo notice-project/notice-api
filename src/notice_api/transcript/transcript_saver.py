@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Annotated, Generator, Protocol
+from typing import Annotated, Generator, Protocol, cast
 from uuid import UUID
 
 import structlog
@@ -17,17 +17,14 @@ class TranscriptResultSaver(Protocol):
         ...
 
 
-class InMemoryTranscriptResultSaver:
+class DatabaseTranscriptResultSaver:
     def __init__(self, db: AsyncSession, note_id: UUID):
-        self.db: AsyncSession = db
-        self.note_id: UUID = note_id
+        self.db = db
+        self.note_id = note_id
 
-    async def save_transcript(
-        self,
-        result: LiveTranscriptionResponse,
-    ):
+    async def save_transcript(self, result: LiveTranscriptionResponse):
         logger = structlog.get_logger("result_saver")
-        transcript: str = result["channel"]["alternatives"][0]["transcript"]
+        transcript = result["channel"]["alternatives"][0]["transcript"]
         start_time = result["start"]
         timestamp = timedelta(seconds=start_time)
 
@@ -54,8 +51,6 @@ def get_transcript_result_saver(
     note: Annotated[Note, Depends(get_notes)],
 ) -> Generator[TranscriptResultSaver, None, None]:
     logger = structlog.get_logger("result_saver")
-    saver = InMemoryTranscriptResultSaver(db=db, note_id=note.id)  # type: ignore[assignment,arg-type]
+    saver = DatabaseTranscriptResultSaver(db=db, note_id=cast(UUID, note.id))
     yield saver
-    logger.info(
-        "Transcript saved",
-    )
+    logger.info("Transcript saved")

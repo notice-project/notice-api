@@ -142,7 +142,9 @@ async def create_bookshelf(
     db.add(bookshelf)
     await db.commit()
     await db.refresh(bookshelf)
-    return CreateBookshelfResponse(data=BookshelfRead.model_validate(bookshelf))
+    return CreateBookshelfResponse(
+        data=BookshelfRead.model_validate({**bookshelf.model_dump(), "count": 0})
+    )
 
 
 class UpdateBookshelfResponse(BaseModel):
@@ -168,7 +170,9 @@ async def update_bookshelf(
 
     await db.commit()
     await db.refresh(bookshelf)
-    return UpdateBookshelfResponse(data=BookshelfRead.model_validate(bookshelf))
+    return UpdateBookshelfResponse(
+        data=BookshelfRead.model_validate({**bookshelf.model_dump(), "count": 0})
+    )
 
 
 @router.delete("/{bookshelf_id}", status_code=status.HTTP_204_NO_CONTENT)
