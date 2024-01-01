@@ -43,6 +43,7 @@ class Note(NoteBase, table=True):
         default=DEFAULT_NOTE_CONTENT,
         sa_type=types.JSON(none_as_null=True),
     )
+    transcript_audio_filename: Optional[str] = None
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": func.now()}
     )
