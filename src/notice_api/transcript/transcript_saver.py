@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Annotated, Generator, Protocol
+from typing import Annotated, Generator, Optional, Protocol
 from uuid import UUID
 
 import structlog
@@ -18,9 +18,9 @@ class TranscriptResultSaver(Protocol):
 
 
 class InMemoryTranscriptResultSaver:
-    def __init__(self, db: AsyncSession, note_id: UUID):
+    def __init__(self, db: AsyncSession, note_id: Optional[UUID]):
         self.db: AsyncSession = db
-        self.note_id: UUID = note_id
+        self.note_id: Optional[UUID] = note_id
         self.transcripts: list[str] = []
         self.timestamps: list[float] = []
 
