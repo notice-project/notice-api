@@ -1,135 +1,71 @@
-from typing import Annotated, AsyncGenerator
+from typing import Annotated
+from uuid import UUID, uuid4
 
 import structlog
-from deepgram import Deepgram
-from deepgram.transcription import LiveTranscription, LiveTranscriptionEvent
-from fastapi import APIRouter, Depends, WebSocket
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, WebSocket, status
 
-from notice_api.core.config import settings
+from notice_api.auth.deps import get_current_user
+from notice_api.db import AsyncSession, get_async_session
+from notice_api.notes.deps import get_current_note
 from notice_api.transcript.audio_saver import (
     AudioSaver,
-    audio_file_name,
-    get_audio_saver,
 )
 from notice_api.transcript.transcript_saver import (
-    TranscriptResultSaver,
+    get_live_transciber,
     get_transcript_result_saver,
 )
 
 router = APIRouter(tags=["transcription"])
 
-MEDIA_RECORDER_INTERVAL = 1000
-html = f"""
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Live Transcription</title>
-    </head>
-    <body>
-        <h1>Live Transcription Test</h1>
-        <button id="record-btn">Start Recording</button>
-        <p id="transcript"></p>
-        <script>
-            var recordBtn = document.querySelector('#record-btn');
-            var isRecording = false;
-            var ws = new WebSocket('ws://localhost:8000/transcription/{audio_file_name}.mp3');
-            var mediaRecorder;
-            navigator.mediaDevices
-                .getUserMedia({{ audio: true }})
-                .then(stream => {{
-                    console.log(stream);
-                    mediaRecorder = new MediaRecorder(stream);
-                    console.log(mediaRecorder)
-                    mediaRecorder.ondataavailable = (e) => {{
-                        console.log(e);
-                        ws.send(e.data);
-                    }}
-                }});
-            recordBtn.addEventListener('click', () => {{
-                console.log('clicked');
-                if (isRecording) {{
-                    recordBtn.innerHTML = 'Start Recording';
-                    mediaRecorder.stop();
-                    isRecording = false;
-                    ws.send('stop');
-                }} else {{
-                    recordBtn.innerHTML = 'Recording...';
-                    mediaRecorder.start({MEDIA_RECORDER_INTERVAL});
-                    isRecording = true;
-                }}
-            }});
-            ws.onmessage = function(event) {{
-                console.log(event);
-                var transcript = document.getElementById('transcript');
-                transcript.innerHTML += event.data;
-            }};
-        </script>
-    </body>
-</html>
-"""
 
-
-@router.get("/transcription")
-def live_transcription_page():
-    return HTMLResponse(html)
-
-
-async def get_live_transciber(
-    result_saver: Annotated[
-        TranscriptResultSaver, Depends(get_transcript_result_saver)
-    ],
-) -> AsyncGenerator[LiveTranscription, None]:
-    """Get a live transcription connection to Deepgram.
-
-    This function can be used as a FastAPI dependency to get a live transcription
-    connection to Deepgram. The connection will be closed when the request is
-    finished.
-
-    Args:
-        result_saver: The result saver to use to save transcripts.
-    """
-
-    logger = structlog.get_logger("live_transcription")
-
-    deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
-    deepgram_live = await deepgram.transcription.live(
-        {"smart_format": True, "model": "nova-2", "language": "en-US"}
-    )
-
-    deepgram_live.registerHandler(
-        LiveTranscriptionEvent.CLOSE,
-        lambda _: logger.info("Connection closed."),
-    )
-    deepgram_live.registerHandler(
-        LiveTranscriptionEvent.TRANSCRIPT_RECEIVED,
-        result_saver.save_transcript,
-    )
-
-    yield deepgram_live
-
-    logger.info("Closing connection")
-    await deepgram_live.finish()
-
-
-@router.websocket("/transcription/{filename}")
+@router.websocket("/bookshelves/{bookshelf_id}/notes/{note_id}/transcription/ws")
 async def handle_live_transcription(
     ws: WebSocket,
-    temp_audio_writer: Annotated[AudioSaver, Depends(get_audio_saver)],
-    deepgram_live: Annotated[LiveTranscription, Depends(get_live_transciber)],
+    bookshelf_id: UUID,
+    note_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    logger = structlog.get_logger("ws")
+    logger = structlog.get_logger("live_transcription")
     await ws.accept()
-    logger.info("Websocket connection established")
 
-    while True:
-        message = await ws.receive()
-        logger.info("Received data")
+    message = await ws.receive_json()
+    match message:
+        case {"type": "init", "payload": session_token}:
+            logger.info("Received init message", session_token=session_token)
+            user = await get_current_user(db, session_token=session_token)
+        case _:
+            await ws.close(code=status.WS_1003_UNSUPPORTED_DATA)
+            return
 
-        match message:
-            case {"text": "stop"}:
-                logger.info("Stopping recording")
-                return
-            case {"bytes": b}:
-                temp_audio_writer.write(b)
-                deepgram_live.send(b)
+    note = await get_current_note(
+        bookshelf_id=bookshelf_id,
+        note_id=note_id,
+        user=user,
+        db=db,
+    )
+
+    transcript_saver = get_transcript_result_saver(db, note)
+    async with get_live_transciber(transcript_saver) as deepgram_live:
+        audio_saver: AudioSaver | None = None
+        while True:
+            message = await ws.receive()
+            match message:
+                case {"text": {"type": "start"}}:
+                    filename = str(uuid4())
+                    logger.info("Received start message", filename=filename)
+                    conn = await db.connection()
+                    await conn.exec_driver_sql(
+                        "UPDATE note SET transcript_audio_filename = %s WHERE id = %s",
+                        (filename, note_id),
+                    )
+                    audio_saver = AudioSaver(filename=filename)
+                case {"text": {"type": "stop"}}:
+                    logger.info("Received stop message")
+                    return
+                case {"bytes": b}:
+                    logger.info(
+                        "Received audio bytes", length=len(b), audio_saver=audio_saver
+                    )
+                    if audio_saver is not None:
+                        audio_saver.write(b)
+                    deepgram_live.send(b)

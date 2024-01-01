@@ -45,6 +45,8 @@ class AudioSaver(BinaryIO):
         self.close()
 
     def write(self, data: bytes | bytearray) -> int:  # pyright: ignore[reportIncompatibleMethodOverride]
+        logger = structlog.get_logger("audio_saver")
+        logger.info("Writing data to file", length=len(data), file=self.temp_path)
         return self.writer.write(data)
 
     def close(self):
