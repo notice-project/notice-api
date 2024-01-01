@@ -42,10 +42,10 @@ async def get_notes(
     limit: int = 10,
     order: Literal["asc", "desc"] = "desc",
     sort: Literal["title", "created_at"] = "created_at",
-):
+) -> GetNotesResponse:
     statement = (
-        select(Note)
-        .where(Note.user_id == user.id, Note.bookshelf_id == bookshelf_id)
+        select(col(Note.id), col(Note.title), col(Note.created_at))
+        .where(col(Note.user_id) == user.id, col(Note.bookshelf_id) == bookshelf_id)
         .limit(limit)
     )
 
@@ -101,7 +101,7 @@ async def create_note(
     note_create: NoteCreate,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> CreateNoteResponse:
     note = Note(
         title=note_create.title,
         bookshelf_id=bookshelf_id,
@@ -124,7 +124,7 @@ async def update_note(
     note_update: NoteCreate,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> UpdateNoteResponse:
     note = await db.get(Note, note_id)
     if note is None or note.user_id != user.id or note.bookshelf_id != bookshelf_id:
         raise HTTPException(
