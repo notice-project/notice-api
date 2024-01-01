@@ -29,7 +29,7 @@ class InMemoryTranscriptResultSaver:
         result: LiveTranscriptionResponse,
     ):
         logger = structlog.get_logger("result_saver")
-        transcript = result["channel"]["alternatives"][0]["transcript"]
+        transcript: str = result["channel"]["alternatives"][0]["transcript"]
         start_time = result["start"]
         timestamp = timedelta(seconds=start_time)
 
