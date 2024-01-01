@@ -5,7 +5,6 @@ import structlog
 from deepgram.transcription import LiveTranscriptionResponse
 from fastapi import Depends
 
-from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
 from notice_api.notes.routes import get_notes
@@ -21,7 +20,6 @@ class TranscriptResultSaver(Protocol):
 class InMemoryTranscriptResultSaver:
     def __init__(self, db: AsyncSession, user: User, note: Note):
         self.db: AsyncSession = db
-        self.user: User = user
         self.note: Note = note
         self.transcripts: list[str] = []
         self.timestamps: list[float] = []
@@ -43,9 +41,8 @@ class InMemoryTranscriptResultSaver:
         self.timestamps.append(start_time)
 
         new_transcript = Transcript(
-            user_id=self.user.id,
             note_id=self.note.id,
-            line_order=self.index,
+            id=self.index,
             text=transcript,
             timestamp=timestamp,
         )
@@ -62,11 +59,10 @@ class InMemoryTranscriptResultSaver:
 
 def get_transcript_result_saver(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-    user: Annotated[User, Depends(get_current_user)],
     note: Annotated[Note, Depends(get_notes)],
 ) -> Generator[TranscriptResultSaver, None, None]:
     logger = structlog.get_logger("result_saver")
-    saver = InMemoryTranscriptResultSaver(db=db, user=user, note=note)
+    saver = InMemoryTranscriptResultSaver(db=db, note=note)
     yield saver
     logger.info(
         "Transcript saved",
