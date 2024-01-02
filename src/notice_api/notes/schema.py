@@ -4,28 +4,14 @@ from uuid import UUID
 
 from sqlalchemy import func, types
 from sqlmodel import Field, SQLModel
-from typing_extensions import TypedDict
+
+from notice_api.notes.note_content import DEFAULT_NOTE_CONTENT, NoteContent
 
 
 class NoteBase(SQLModel):
     """Base model for a note."""
 
     title: str
-
-
-class NoteContent(TypedDict):
-    id: str
-    type: str
-    value: str
-    children: list["NoteContent"]
-
-
-DEFAULT_NOTE_CONTENT: NoteContent = {
-    "id": "root",
-    "type": "RootNode",
-    "value": "",
-    "children": [],
-}
 
 
 class Note(NoteBase, table=True):
