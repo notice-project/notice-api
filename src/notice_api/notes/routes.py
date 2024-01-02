@@ -188,8 +188,8 @@ async def fake_generate_note():
 async def handle_note_generation(
     websocket: WebSocket, transcripts: list[str], usernote: str, index: int
 ):
-    logger = structlog.get_logger("generate_note")
-    logger.info("Generating note", index=index)
+    logger = structlog.get_logger("handle_note_generation", index=index)
+    logger.info("Generating note")
     index -= 1
 
     # generated_note = model.generate_note_openai_async(transcripts, usernote)
@@ -234,7 +234,7 @@ async def handle_note_generation(
             path=indent_level_ids[:indent_level],
             item=item,
         )
-        logger.info("Sending update", index=index, update=update)
+        logger.info("Sending update", update=update)
         await websocket.send_json(
             {
                 "type": "generated",
@@ -256,7 +256,7 @@ async def take_note(
     repo: Annotated[NoteRepository, Depends(get_note_repository)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    logger = structlog.get_logger("take_note")
+    logger = structlog.get_logger("take_note", note_id=str(note_id))
     await websocket.accept()
 
     message = await websocket.receive_json()
@@ -290,13 +290,13 @@ async def take_note(
                 "type": "update",
                 "payload": {"index": index, "content": content},
             }:
-                logger.info("Received update", note_id=note.id, index=index)
+                logger.info("Received update", index=index)
                 await repo.update_note_content_partial(
                     note_id=note_id,
                     index=index,
                     content=content,
                 )
-                logger.info("Note updated", note_id=note.id, index=index)
+                logger.info("Note updated", index=index)
             case {"type": "update all", "payload": new_children}:
                 logger.info(
                     "Received full update",
@@ -310,19 +310,16 @@ async def take_note(
                 updated_content = await repo.get_note_content(note_id)
                 logger.info(
                     "Full update complete",
-                    note_id=note.id,
                     children_count=len(updated_content),
                 )
             case {"type": "update title", "payload": new_title}:
-                logger.info("Received title update", note_id=note.id, title=new_title)
+                logger.info("Received title update", title=new_title)
                 await repo.update_note_title(note_id=note_id, title=new_title)
-                logger.info("Title updated", note_id=note.id, title=new_title)
+                logger.info("Title updated", title=new_title)
             case {"type": "notice me", "payload": index}:
                 # get last 140 transcript records
                 transcripts = await repo.get_note_transcriptions(note_id, last_n=140)
-                logger.info(
-                    "Transcripts fetched", note_id=note.id, transcripts=transcripts
-                )
+                logger.info("Transcripts fetched", transcripts=transcripts)
                 note_content = await repo.get_note_content(note_id)
                 markdown_content = to_markdown(
                     {

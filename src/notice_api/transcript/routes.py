@@ -26,7 +26,7 @@ async def handle_live_transcription(
     note_id: UUID,
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    logger = structlog.get_logger("live_transcription")
+    logger = structlog.get_logger("live_transcription.route")
     await ws.accept()
 
     message = await ws.receive_json()
