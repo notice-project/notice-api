@@ -5,11 +5,12 @@ from typing import Sequence
 from langchain.chains import LLMChain, SimpleSequentialChain
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import PromptTemplate
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from notice_api.core.config import settings
 
 OpenAIClient = OpenAI(api_key=settings.OPENAI_API_KEY)
+async_openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 llm = ChatOpenAI(
     model="gpt-3.5-turbo-16k", temperature=0.3, api_key=settings.OPENAI_API_KEY
@@ -196,3 +197,55 @@ def generate_note_openai(
     # 以下可以用來 debug 模型原始輸出
     # yield check_result + "\n"
     # yield '\n' + (generated_note or '')+'\n'
+
+
+async def generate_note_openai_async(
+    transcript: str | Sequence[str], usernote: str, temperature: float = 0.7
+):
+    """Generate note using OpenAI API, but run asynchronously."""
+    # 整理成條列式
+    note_generation_prompt = note_generation_template.format(
+        transcript="\n".join(transcript)
+    )
+    response = await async_openai_client.chat.completions.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[{"role": "user", "content": note_generation_prompt}],
+        temperature=temperature,
+    )
+    generated_note = response.choices[0].message.content
+
+    # 與使用者筆記做對照並標記
+    check_with_usernote_prompt = check_with_usernote_template.format(
+        usernote=usernote, generated_note=generated_note
+    )
+    response = await async_openai_client.chat.completions.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[{"role": "user", "content": check_with_usernote_prompt}],
+        temperature=0.0,
+        stream=True,
+    )
+
+    check_string = ""  # 用來檢查目前收到的回應是否書要傳出去
+    check_result = "<check result>\n"  # 紀錄完整的模型輸出
+    async for chunk in response:
+        if chunk.choices[0].delta.content is None:
+            # openai 回應結束
+            break
+        else:
+            check_string += chunk.choices[0].delta.content
+            check_result += chunk.choices[0].delta.content
+
+            if "<N>" in check_string:
+                index = check_string.find("<N>")
+                yield check_string[:index]
+                rest_of_string = check_string[index + len("<N>") :]
+                check_string = rest_of_string
+
+            elif (
+                "<" in check_string
+                and ">" in check_string
+                and check_string.find(">") > check_string.find("<")
+            ):
+                index = check_string.find(">")
+                rest_of_string = check_string[index + len(">") :]
+                check_string = rest_of_string
