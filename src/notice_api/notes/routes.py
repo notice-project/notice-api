@@ -1,4 +1,3 @@
-import asyncio
 from base64 import b64decode, b64encode
 from datetime import datetime
 from typing import Annotated, Literal, Optional, cast
@@ -13,6 +12,7 @@ from typing_extensions import TypedDict
 from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
+from notice_api.note_completion import model
 from notice_api.notes.deps import get_current_note
 from notice_api.notes.note_content import HeadingContent, to_markdown
 from notice_api.notes.repository import NoteRepository, get_note_repository
@@ -165,26 +165,6 @@ class UpdateNoteMessage(TypedDict):
     item: NoteContent
 
 
-async def fake_generate_note():
-    generated_note = [
-        "# This is heading 1",
-        "## This is heading 2",
-        "### This is heading 3",
-        "- Static sequence interface",
-        "    - Number of items doesn't change",
-        "    - Static array is the natural solution to this interface problem",
-        "        - Data structures can be considered solutions",
-        "        - Memory is an array of w-bit words",
-        "    - Operations: build, length, iteration, get, set",
-        "        - for this case, we need operations build, length, iteration, get and set",
-        "- Another item",
-        "- Another item",
-    ]
-    for line in generated_note:
-        await asyncio.sleep(5)
-        yield line
-
-
 async def handle_note_generation(
     websocket: WebSocket, transcripts: list[str], usernote: str, index: int
 ):
@@ -192,9 +172,7 @@ async def handle_note_generation(
     logger.info("Generating note")
     index -= 1
 
-    # generated_note = model.generate_note_openai_async(transcripts, usernote)
-    await asyncio.sleep(5)
-    generated_note = fake_generate_note()
+    generated_note = model.generate_note_openai_async(transcripts, usernote)
     indent_level_ids: list[str] = []
 
     async for line in generated_note:
