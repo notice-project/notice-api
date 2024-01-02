@@ -145,48 +145,12 @@ async def delete_note(
     await db.commit()
 
 
-@overload
-async def get_note_content(
-    note_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> list[NoteContent]:
-    ...
-
-
-@overload
-async def get_note_content(
-    note_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    index: int,
-) -> NoteContent:
-    ...
-
-
-async def get_note_content(
-    note_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    index: Optional[int] = None,
-) -> list[NoteContent] | NoteContent:
-    conn = await db.connection()
-    if index is None:
-        statement = "SELECT `content` ->> '$.children' FROM note WHERE id = %s"
-        parameters = (note_id.hex,)
-    else:
-        statement = "SELECT `content` ->> '$.children[%s]' FROM note WHERE id = %s"
-        parameters = (index, note_id.hex)
-
-    result = await conn.exec_driver_sql(statement, parameters)
-    for (row,) in result:
-        return json.loads(row)
-
-    return []
-
-
 @router.websocket("/{note_id}/ws")
 async def take_note(
     websocket: WebSocket,
     bookshelf_id: UUID,
     note_id: UUID,
+    repo: Annotated[NoteRepository, Depends(get_note_repository)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     logger = structlog.get_logger("take_note")
@@ -206,7 +170,7 @@ async def take_note(
         user=user,
         db=db,
     )
-    content = await get_note_content(note_id=note_id, db=db)
+    content = await repo.get_note_content(note_id=note_id)
 
     note_content = NoteContent(
         id="root",
@@ -217,28 +181,17 @@ async def take_note(
     await websocket.send_json({"type": "note", "payload": note_content})
 
     while True:
-        data = await websocket.receive_json()
-        match data:
-            case {"type": "update", "payload": {"index": index, "content": content}}:
+        message = await websocket.receive_json()
+        match message:
+            case {
+                "type": "update",
+                "payload": {"index": index, "content": content},
+            }:
                 logger.info("Received update", note_id=note.id, index=index)
-                content = json.dumps(content)
-                id = cast(UUID, note.id).hex
-                conn = await db.connection()
-                await conn.exec_driver_sql(
-                    """
-                    UPDATE
-                        note
-                    SET
-                        `content` = JSON_SET(`content`, '$.children[%s]', CAST(%s AS JSON))
-                    WHERE
-                        id = %s
-                    """,
-                    (index, content, id),
-                )
-                await db.commit()
-                conn = await db.connection()
-                updated_content = await get_note_content(
-                    note_id=note_id, db=db, index=index
+                await repo.update_note_content_partial(
+                    note_id=note_id,
+                    index=index,
+                    content=content,
                 )
                 logger.info("Note updated", note_id=note.id, index=index)
                 await websocket.send_json(
@@ -250,22 +203,11 @@ async def take_note(
                     note_id=note.id,
                     children_count=len(new_children),
                 )
-                new_children = json.dumps(new_children)
-                conn = await db.connection()
-                await conn.exec_driver_sql(
-                    """
-                    UPDATE
-                        note
-                    SET
-                        `content` = JSON_SET(`content`, '$.children', CAST(%s AS JSON))
-                    WHERE
-                        id = %s
-                    """,
-                    (new_children, cast(UUID, note.id).hex),
+                await repo.update_note_content(
+                    note_id=note_id,
+                    content=new_children,
                 )
-                await db.commit()
-                conn = await db.connection()
-                updated_content = await get_note_content(note_id=note_id, db=db)
+                updated_content = await repo.get_note_content(note_id)
                 logger.info(
                     "Full update complete",
                     note_id=note.id,
@@ -276,19 +218,7 @@ async def take_note(
                 )
             case {"type": "update title", "payload": new_title}:
                 logger.info("Received title update", note_id=note.id, title=new_title)
-                conn = await db.connection()
-                await conn.exec_driver_sql(
-                    """
-                    UPDATE
-                        note
-                    SET
-                        `title` = %s
-                    WHERE
-                        id = %s
-                    """,
-                    (new_title, cast(UUID, note.id).hex),
-                )
-                await db.commit()
+                await repo.update_note_title(note_id=note_id, title=new_title)
                 logger.info("Title updated", note_id=note.id, title=new_title)
             case _:
                 await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
