@@ -1,19 +1,27 @@
-import json
+import asyncio
 from base64 import b64decode, b64encode
 from datetime import datetime
-from typing import Annotated, Literal, Optional, cast, overload
-from uuid import UUID
+from typing import Annotated, Literal, Optional, cast
+from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
 from pydantic import BaseModel
 from sqlmodel import col, select
+from typing_extensions import TypedDict
 
 from notice_api.auth.deps import get_current_user
 from notice_api.auth.schema import User
 from notice_api.db import AsyncSession, get_async_session
 from notice_api.notes.deps import get_current_note
-from notice_api.notes.schema import Note, NoteContent, NoteCreate, NoteRead
+from notice_api.notes.note_content import HeadingContent, to_markdown
+from notice_api.notes.repository import NoteRepository, get_note_repository
+from notice_api.notes.schema import (
+    Note,
+    NoteContent,
+    NoteCreate,
+    NoteRead,
+)
 
 router = APIRouter(prefix="/bookshelves/{bookshelf_id}/notes", tags=["notes"])
 
@@ -145,6 +153,91 @@ async def delete_note(
     await db.commit()
 
 
+class UpdateNoteItem(TypedDict):
+    id: str
+    type: str
+    value: str
+
+
+class UpdateNoteMessage(TypedDict):
+    index: int
+    path: list[str]
+    item: NoteContent
+
+
+async def fake_generate_note():
+    generated_note = [
+        "# This is heading 1",
+        "## This is heading 2",
+        "### This is heading 3",
+        "- Static sequence interface",
+        "    - Number of items doesn't change",
+        "    - Static array is the natural solution to this interface problem",
+        "        - Data structures can be considered solutions",
+        "        - Memory is an array of w-bit words",
+        "    - Operations: build, length, iteration, get, set",
+        "        - for this case, we need operations build, length, iteration, get and set",
+        "- Another item",
+        "- Another item",
+    ]
+    for line in generated_note:
+        await asyncio.sleep(5)
+        yield line
+
+
+async def handle_note_generation(
+    websocket: WebSocket, transcripts: list[str], usernote: str, index: int
+):
+    logger = structlog.get_logger("generate_note")
+    logger.info("Generating note", index=index)
+    index -= 1
+
+    # generated_note = model.generate_note_openai_async(transcripts, usernote)
+    await asyncio.sleep(5)
+    generated_note = fake_generate_note()
+    indent_level_ids: list[str] = []
+
+    async for line in generated_note:
+        value = line.strip()
+        first_not_space = line.find(value)
+        indent_level = first_not_space // 4
+        if indent_level == 0:
+            index += 1
+
+        id = str(uuid4())
+        if indent_level >= len(indent_level_ids):
+            indent_level_ids.append(id)
+        else:
+            indent_level_ids[indent_level] = id
+
+        item: NoteContent = {
+            "id": id,
+            "type": "BlockNode",
+            "value": value,
+            "children": [],
+        }
+        if value.startswith("- "):
+            item["type"] = "ListItemNode"
+            item["value"] = value[2:]
+        elif value.startswith("#"):
+            item["type"] = "HeadingNode"
+            # count the number of leading #s
+            heading_level = 0
+            while value.startswith("#"):
+                heading_level += 1
+                value = value[1:]
+            item["value"] = value.strip()
+            cast(HeadingContent, item)["level"] = heading_level
+
+        update = UpdateNoteMessage(
+            index=index,
+            path=indent_level_ids[:indent_level],
+            item=item,
+        )
+        logger.info("Sending update", index=index, update=update)
+        await websocket.send_json({"type": "generated", "payload": update})
+
+
 @router.websocket("/{note_id}/ws")
 async def take_note(
     websocket: WebSocket,
@@ -194,9 +287,6 @@ async def take_note(
                     content=content,
                 )
                 logger.info("Note updated", note_id=note.id, index=index)
-                await websocket.send_json(
-                    {"type": "update", "payload": updated_content}
-                )
             case {"type": "update all", "payload": new_children}:
                 logger.info(
                     "Received full update",
@@ -213,12 +303,31 @@ async def take_note(
                     note_id=note.id,
                     children_count=len(updated_content),
                 )
-                await websocket.send_json(
-                    {"type": "update", "payload": updated_content}
-                )
             case {"type": "update title", "payload": new_title}:
                 logger.info("Received title update", note_id=note.id, title=new_title)
                 await repo.update_note_title(note_id=note_id, title=new_title)
                 logger.info("Title updated", note_id=note.id, title=new_title)
+            case {"type": "notice me", "payload": index}:
+                # get last 140 transcript records
+                transcripts = await repo.get_note_transcriptions(note_id, last_n=140)
+                logger.info(
+                    "Transcripts fetched", note_id=note.id, transcripts=transcripts
+                )
+                note_content = await repo.get_note_content(note_id)
+                markdown_content = to_markdown(
+                    {
+                        "id": "root",
+                        "type": "RootNode",
+                        "value": note.title,
+                        "children": note_content,
+                    }
+                )
+
+                await handle_note_generation(
+                    websocket=websocket,
+                    transcripts=transcripts,
+                    usernote=markdown_content,
+                    index=index,
+                )
             case _:
                 await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
