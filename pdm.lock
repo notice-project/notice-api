@@ -5,7 +5,7 @@
 groups = ["default", "dev", "dump"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:1aec8d6cba6efbe11c839ead9594f6463b9bf3fc00900d955b3a6dfaf8243ef7"
+content_hash = "sha256:c8652660fa9490a52de1e61d81f8526260a01b75739cfa42febede929fb8deda"
 
 [[package]]
 name = "aiohttp"
@@ -395,6 +395,19 @@ files = [
     {file = "greenlet-3.0.3-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:649dde7de1a5eceb258f9cb00bdf50e978c9db1b996964cd80703614c86495eb"},
     {file = "greenlet-3.0.3-cp310-cp310-win_amd64.whl", hash = "sha256:68834da854554926fbedd38c76e60c4a2e3198c6fbed520b106a8986445caaf9"},
     {file = "greenlet-3.0.3.tar.gz", hash = "sha256:43374442353259554ce33599da8b692d5aa96f8976d567d4badf263371fbe491"},
+]
+
+[[package]]
+name = "gunicorn"
+version = "21.2.0"
+requires_python = ">=3.5"
+summary = "WSGI HTTP Server for UNIX"
+dependencies = [
+    "packaging",
+]
+files = [
+    {file = "gunicorn-21.2.0-py3-none-any.whl", hash = "sha256:3213aa5e8c24949e792bcacfc176fef362e7aac80b76c56f6b5122bf350722f0"},
+    {file = "gunicorn-21.2.0.tar.gz", hash = "sha256:88ec8bff1d634f98e61b9f65bc4bf3cd918a90806c6f5c48bc5603849ec81033"},
 ]
 
 [[package]]
