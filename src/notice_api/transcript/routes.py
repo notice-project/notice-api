@@ -1,6 +1,7 @@
 import json
+from datetime import datetime
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, WebSocket, status
@@ -26,7 +27,7 @@ async def handle_live_transcription(
     note_id: UUID,
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    logger = structlog.get_logger("live_transcription")
+    logger = structlog.get_logger("live_transcription.route")
     await ws.accept()
 
     message = await ws.receive_json()
@@ -45,29 +46,38 @@ async def handle_live_transcription(
         db=db,
     )
 
-    transcript_saver = get_transcript_result_saver(db, note)
-    async with get_live_transciber(transcript_saver) as deepgram_live:
-        audio_saver: AudioSaver | None = None
-        while True:
-            message = await ws.receive()
-            if (b := message.get("bytes")) is not None:
-                logger.info("Received audio bytes", length=len(b))
-                if audio_saver is not None:
-                    audio_saver.write(b)
-                deepgram_live.send(b)
-                logger.info("Sent audio bytes to deepgram")
-                continue
+    audio_saver: AudioSaver | None = None
+    while True:
+        message = await ws.receive_json()
+        match message:
+            case {"type": "start"}:
+                filename = f"{note_id}_{datetime.now():%Y-%M-%d-%H:%M:%S}.mp3"
+                logger.info("Received start message", filename=filename)
+                conn = await db.connection()
+                await conn.exec_driver_sql(
+                    "UPDATE note SET transcript_audio_filename = %s WHERE id = %s",
+                    (filename, note_id),
+                )
+                audio_saver = AudioSaver(filename=filename)
+                break
+            case _:
+                logger.warning("Received unknown message")
 
-            match json.loads(message["text"]):
-                case {"type": "start"}:
-                    filename = str(uuid4())
-                    logger.info("Received start message", filename=filename)
-                    conn = await db.connection()
-                    await conn.exec_driver_sql(
-                        "UPDATE note SET transcript_audio_filename = %s WHERE id = %s",
-                        (filename, note_id),
-                    )
-                    audio_saver = AudioSaver(filename=filename)
-                case {"type": "stop"}:
-                    logger.info("Received stop message")
-                    return
+    with audio_saver:
+        transcript_saver = get_transcript_result_saver(db, note)
+        async with get_live_transciber(transcript_saver) as deepgram_live:
+            while True:
+                message = await ws.receive()
+                if (b := message.get("bytes")) is not None:
+                    logger.info("Received audio bytes", length=len(b))
+                    audio_saver.write(b)
+                    deepgram_live.send(b)
+                    logger.info("Sent audio bytes to deepgram")
+                    continue
+
+                match json.loads(message["text"]):
+                    case {"type": "stop"}:
+                        logger.info("Received stop message")
+                        return
+                    case _:
+                        logger.warning("Received unknown message")

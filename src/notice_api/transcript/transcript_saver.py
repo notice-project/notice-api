@@ -80,7 +80,7 @@ async def get_live_transciber(
         result_saver: The result saver to use to save transcripts.
     """
 
-    logger = structlog.get_logger("live_transcription")
+    logger = structlog.get_logger("live_transcription.transcriber")
 
     deepgram = Deepgram(settings.DEEPGRAM_SECRET_KEY)
     deepgram_live = await deepgram.transcription.live(

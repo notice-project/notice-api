@@ -22,6 +22,7 @@ dependencies = [
     "sqlmodel>=0.0.14",
     "email-validator>=2.0.0.post2",
     "asyncmy>=0.2.9",
+    "gunicorn>=21.2.0",
 ]
 requires-python = "==3.10.*"
 readme = "README.md"
@@ -37,6 +38,7 @@ dev = ["pyright>=1.1.339", "ruff>=0.1.7"]
 
 [tool.pdm.scripts]
 dev = "uvicorn notice_api.main:app --reload --port 8000 --host 0.0.0.0 --log-config uvicorn_disable_logging.json"
+start = "gunicorn notice_api.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
 format = "ruff format src"
 lint = "ruff check src"
 typecheck = "pyright src"

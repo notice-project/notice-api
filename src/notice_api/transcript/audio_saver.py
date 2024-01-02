@@ -19,7 +19,7 @@ def get_path_for(filename: str) -> Path:
 
 
 def mimetype_to_mp3(output_filename: str):
-    logger = structlog.get_logger()
+    logger = structlog.get_logger("mimetype_to_mp3")
 
     audio_bytes = TEMP_MIME_AUDIO_PATH.read_bytes()
     audio_segment = AudioSegment.from_file(BytesIO(audio_bytes))
@@ -31,7 +31,7 @@ def mimetype_to_mp3(output_filename: str):
 
 class AudioSaver(BinaryIO):
     def __init__(self, filename: str):
-        self.temp_path = AUDIO_DIRECTORY / uuid4().hex
+        self.temp_path = AUDIO_DIRECTORY / f"{uuid4()}.tmp"
         self.temp_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.filename = get_path_for(filename)
@@ -50,12 +50,17 @@ class AudioSaver(BinaryIO):
         return self.writer.write(data)
 
     def close(self):
+        logger = structlog.get_logger("audio_saver")
+
+        logger.info("Closing audio saver")
         self.writer.close()
 
         # Convert the audio to mp3 for playback
+        logger.info("Converting audio to mp3")
         audio_segment = AudioSegment.from_file(self.temp_path)
         audio_segment.export(self.filename, format="mp3")
 
+        logger.info("Deleting temporary file")
         self.temp_path.unlink()
 
 

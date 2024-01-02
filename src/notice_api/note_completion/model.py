@@ -1,5 +1,6 @@
 # ruff: noqa: RUF001
 
+import re
 from typing import Sequence
 
 from langchain.chains import LLMChain, SimpleSequentialChain
@@ -199,6 +200,9 @@ def generate_note_openai(
     # yield '\n' + (generated_note or '')+'\n'
 
 
+CHECK_MARKER_PATTERN = re.compile(r"<.*?>")
+
+
 async def generate_note_openai_async(
     transcript: str | Sequence[str], usernote: str, temperature: float = 0.7
 ):
@@ -235,17 +239,12 @@ async def generate_note_openai_async(
             check_string += chunk.choices[0].delta.content
             check_result += chunk.choices[0].delta.content
 
-            if "<N>" in check_string:
-                index = check_string.find("<N>")
+            if (index := check_string.find("<N>")) != -1:
                 yield check_string[:index]
                 rest_of_string = check_string[index + len("<N>") :]
                 check_string = rest_of_string
 
-            elif (
-                "<" in check_string
-                and ">" in check_string
-                and check_string.find(">") > check_string.find("<")
-            ):
-                index = check_string.find(">")
-                rest_of_string = check_string[index + len(">") :]
+            elif (m := CHECK_MARKER_PATTERN.search(check_string)) is not None:
+                _, match_end = m.span()
+                rest_of_string = check_string[match_end:]
                 check_string = rest_of_string

@@ -13,8 +13,8 @@ router = APIRouter(tags=["audio"])
 async def get_audio(
     filename: Annotated[str, Path(description="The filename of the audio file")],
 ) -> FileResponse:
-    logger = structlog.get_logger()
+    logger = structlog.get_logger("get_audio")
     audio_file_path = audio_saver.get_path_for(filename)
 
-    logger.info(f"Retrieved audio file: {filename}")
+    logger.info("Retrieved audio file", filename=str(filename))
     return FileResponse(path=audio_file_path, media_type="audio/mpeg")
