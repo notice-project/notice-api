@@ -235,7 +235,17 @@ async def handle_note_generation(
             item=item,
         )
         logger.info("Sending update", index=index, update=update)
-        await websocket.send_json({"type": "generated", "payload": update})
+        await websocket.send_json(
+            {
+                "type": "generated",
+                "payload": {
+                    "finished": False,
+                    "content": update,
+                },
+            }
+        )
+
+    await websocket.send_json({"type": "generated", "payload": {"finished": True}})
 
 
 @router.websocket("/{note_id}/ws")
