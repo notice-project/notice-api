@@ -64,4 +64,4 @@ jobs:
       - run: dirname $(pdm info --python) >> $GITHUB_PATH
 
       - name: Run Type Checker
-        uses: jakebailey/pyright-action@v1
+        uses: jakebailey/pyright-action@v2
